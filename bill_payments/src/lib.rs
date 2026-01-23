@@ -1,15 +1,22 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Env, Map, String, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Map, String,
+    Vec,
 };
 
+// Storage TTL constants
+const INSTANCE_LIFETIME_THRESHOLD: u32 = 17280; // ~1 day
+const INSTANCE_BUMP_AMOUNT: u32 = 518400; // ~30 days
+
+/// Bill data structure with owner tracking for access control
 #[derive(Clone)]
 #[contracttype]
 pub struct Bill {
     pub id: u32,
+    pub owner: Address,
     pub name: String,
     pub amount: i128,
-    pub due_date: u64, // Unix timestamp
+    pub due_date: u64,
     pub recurring: bool,
     pub frequency_days: u32,
     pub paid: bool,
@@ -25,6 +32,15 @@ pub enum Error {
     BillAlreadyPaid = 2,
     InvalidAmount = 3,
     InvalidFrequency = 4,
+    Unauthorized = 5,
+}
+
+/// Events emitted by the contract for audit trail
+#[contracttype]
+#[derive(Clone)]
+pub enum BillEvent {
+    Created,
+    Paid,
 }
 
 #[contract]
@@ -35,6 +51,7 @@ impl BillPayments {
     /// Create a new bill
     ///
     /// # Arguments
+    /// * `owner` - Address of the bill owner (must authorize)
     /// * `name` - Name of the bill (e.g., "Electricity", "School Fees")
     /// * `amount` - Amount to pay (must be positive)
     /// * `due_date` - Due date as Unix timestamp
@@ -49,12 +66,16 @@ impl BillPayments {
     /// * `InvalidFrequency` - If recurring is true but frequency_days is 0
     pub fn create_bill(
         env: Env,
+        owner: Address,
         name: String,
         amount: i128,
         due_date: u64,
         recurring: bool,
         frequency_days: u32,
     ) -> Result<u32, Error> {
+        // Access control: require owner authorization
+        owner.require_auth();
+
         // Validate inputs
         if amount <= 0 {
             return Err(Error::InvalidAmount);
@@ -64,6 +85,8 @@ impl BillPayments {
             return Err(Error::InvalidFrequency);
         }
 
+        // Extend storage TTL
+        Self::extend_instance_ttl(&env);
         let mut bills: Map<u32, Bill> = env
             .storage()
             .instance()
@@ -80,6 +103,7 @@ impl BillPayments {
         let current_time = env.ledger().timestamp();
         let bill = Bill {
             id: next_id,
+            owner: owner.clone(),
             name: name.clone(),
             amount,
             due_date,
@@ -98,12 +122,19 @@ impl BillPayments {
             .instance()
             .set(&symbol_short!("NEXT_ID"), &next_id);
 
+        // Emit event for audit trail
+        env.events().publish(
+            (symbol_short!("bill"), BillEvent::Created),
+            (next_id, owner),
+        );
+
         Ok(next_id)
     }
 
     /// Mark a bill as paid
     ///
     /// # Arguments
+    /// * `caller` - Address of the caller (must be the bill owner)
     /// * `bill_id` - ID of the bill
     ///
     /// # Returns
@@ -112,7 +143,13 @@ impl BillPayments {
     /// # Errors
     /// * `BillNotFound` - If bill with given ID doesn't exist
     /// * `BillAlreadyPaid` - If bill is already marked as paid
-    pub fn pay_bill(env: Env, bill_id: u32) -> Result<(), Error> {
+    /// * `Unauthorized` - If caller is not the bill owner
+    pub fn pay_bill(env: Env, caller: Address, bill_id: u32) -> Result<(), Error> {
+        // Access control: require caller authorization
+        caller.require_auth();
+
+        // Extend storage TTL
+        Self::extend_instance_ttl(&env);
         let mut bills: Map<u32, Bill> = env
             .storage()
             .instance()
@@ -120,6 +157,11 @@ impl BillPayments {
             .unwrap_or_else(|| Map::new(&env));
 
         let mut bill = bills.get(bill_id).ok_or(Error::BillNotFound)?;
+
+        // Access control: verify caller is the owner
+        if bill.owner != caller {
+            return Err(Error::Unauthorized);
+        }
 
         if bill.paid {
             return Err(Error::BillAlreadyPaid);
@@ -141,6 +183,7 @@ impl BillPayments {
 
             let next_bill = Bill {
                 id: next_id,
+                owner: bill.owner.clone(),
                 name: bill.name.clone(),
                 amount: bill.amount,
                 due_date: next_due_date,
@@ -150,7 +193,6 @@ impl BillPayments {
                 created_at: current_time,
                 paid_at: None,
             };
-
             bills.set(next_id, next_bill);
             env.storage()
                 .instance()
@@ -161,6 +203,10 @@ impl BillPayments {
         env.storage()
             .instance()
             .set(&symbol_short!("BILLS"), &bills);
+
+        // Emit event for audit trail
+        env.events()
+            .publish((symbol_short!("bill"), BillEvent::Paid), (bill_id, caller));
 
         Ok(())
     }
@@ -182,11 +228,14 @@ impl BillPayments {
         bills.get(bill_id)
     }
 
-    /// Get all unpaid bills
+    /// Get all unpaid bills for a specific owner
+    ///
+    /// # Arguments
+    /// * `owner` - Address of the bill owner
     ///
     /// # Returns
-    /// Vec of unpaid Bill structs
-    pub fn get_unpaid_bills(env: Env) -> Vec<Bill> {
+    /// Vec of unpaid Bill structs belonging to the owner
+    pub fn get_unpaid_bills(env: Env, owner: Address) -> Vec<Bill> {
         let bills: Map<u32, Bill> = env
             .storage()
             .instance()
@@ -202,7 +251,7 @@ impl BillPayments {
 
         for i in 1..=max_id {
             if let Some(bill) = bills.get(i) {
-                if !bill.paid {
+                if !bill.paid && bill.owner == owner {
                     result.push_back(bill);
                 }
             }
@@ -239,12 +288,15 @@ impl BillPayments {
         result
     }
 
-    /// Get total amount of unpaid bills
+    /// Get total amount of unpaid bills for a specific owner
+    ///
+    /// # Arguments
+    /// * `owner` - Address of the bill owner
     ///
     /// # Returns
-    /// Total amount of all unpaid bills
-    pub fn get_total_unpaid(env: Env) -> i128 {
-        let unpaid = Self::get_unpaid_bills(env);
+    /// Total amount of all unpaid bills belonging to the owner
+    pub fn get_total_unpaid(env: Env, owner: Address) -> i128 {
+        let unpaid = Self::get_unpaid_bills(env, owner);
         let mut total = 0i128;
         for bill in unpaid.iter() {
             total += bill.amount;
@@ -305,6 +357,13 @@ impl BillPayments {
             }
         }
         result
+    }
+
+    /// Extend the TTL of instance storage
+    fn extend_instance_ttl(env: &Env) {
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
     }
 }
 
