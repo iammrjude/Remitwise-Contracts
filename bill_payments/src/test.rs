@@ -760,4 +760,90 @@ mod testsuit {
         assert_eq!(schedules.len(), 2);
     }
     */
+    #[test]
+    fn test_create_bill_emits_event() {
+        use soroban_sdk::testutils::Events;
+        use soroban_sdk::{symbol_short, vec, IntoVal};
+
+        let env = Env::default();
+        let contract_id = env.register_contract(None, BillPayments);
+        let client = BillPaymentsClient::new(&env, &contract_id);
+        let owner = <soroban_sdk::Address as AddressTrait>::generate(&env);
+
+        env.mock_all_auths();
+
+        client.create_bill(
+            &owner,
+            &String::from_str(&env, "Electricity"),
+            &1000,
+            &1000000,
+            &false,
+            &0,
+        );
+
+        let events = env.events().all();
+        assert!(events.len() > 0);
+        let last_event = events.last().unwrap();
+
+        let expected_topics = vec![
+            &env,
+            symbol_short!("Remitwise").into_val(&env),
+            1u32.into_val(&env), // EventCategory::State
+            1u32.into_val(&env), // EventPriority::Medium
+            symbol_short!("created").into_val(&env),
+        ];
+
+        assert_eq!(last_event.1, expected_topics);
+
+        let data: (u32, soroban_sdk::Address, i128, u64) =
+            soroban_sdk::FromVal::from_val(&env, &last_event.2);
+        assert_eq!(data, (1u32, owner.clone(), 1000i128, 1000000u64));
+
+        assert_eq!(last_event.0, contract_id.clone());
+    }
+
+    #[test]
+    fn test_pay_bill_emits_event() {
+        use soroban_sdk::testutils::Events;
+        use soroban_sdk::{symbol_short, vec, IntoVal};
+
+        let env = Env::default();
+        let contract_id = env.register_contract(None, BillPayments);
+        let client = BillPaymentsClient::new(&env, &contract_id);
+        let owner = <soroban_sdk::Address as AddressTrait>::generate(&env);
+
+        env.mock_all_auths();
+
+        let bill_id = client.create_bill(
+            &owner,
+            &String::from_str(&env, "Electricity"),
+            &1000,
+            &1000000,
+            &false,
+            &0,
+        );
+
+        env.mock_all_auths();
+
+        client.pay_bill(&owner, &bill_id);
+
+        let events = env.events().all();
+        let last_event = events.last().unwrap();
+
+        let expected_topics = vec![
+            &env,
+            symbol_short!("Remitwise").into_val(&env),
+            0u32.into_val(&env), // EventCategory::Transaction
+            2u32.into_val(&env), // EventPriority::High
+            symbol_short!("paid").into_val(&env),
+        ];
+
+        assert_eq!(last_event.1, expected_topics);
+
+        let data: (u32, soroban_sdk::Address, i128) =
+            soroban_sdk::FromVal::from_val(&env, &last_event.2);
+        assert_eq!(data, (bill_id, owner.clone(), 1000i128));
+
+        assert_eq!(last_event.0, contract_id.clone());
+    }
 }
