@@ -11,6 +11,12 @@ This workspace contains the core smart contracts that power RemitWise's post-rem
 - **bill_payments**: Automated bill payment tracking and scheduling
 - **insurance**: Micro-insurance policy management and premium payments
 
+## CLI Tool
+
+A custom Rust CLI is provided for interacting with the contracts without a UI.
+
+See [cli/README.md](cli/README.md) for usage instructions.
+
 ## Prerequisites
 
 - Rust (latest stable version)
