@@ -23,13 +23,47 @@
                   "u32": 50
                 },
                 {
-                  "u32": 25
+                  "u32": 30
                 },
                 {
                   "u32": 15
                 },
                 {
-                  "u32": 10
+                  "u32": 5
+                }
+              ]
+            }
+          },
+          "sub_invocations": []
+        }
+      ]
+    ],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+        {
+          "function": {
+            "contract_fn": {
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "function_name": "update_split",
+              "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "u64": 1
+                },
+                {
+                  "u32": 40
+                },
+                {
+                  "u32": 25
+                },
+                {
+                  "u32": 20
+                },
+                {
+                  "u32": 15
                 }
               ]
             }
@@ -39,17 +73,18 @@
       ]
     ],
     [],
+    [],
     []
   ],
   "ledger": {
-    "protocol_version": 21,
-    "sequence_number": 0,
-    "timestamp": 0,
+    "protocol_version": 20,
+    "sequence_number": 1020000,
+    "timestamp": 1020000,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
-    "base_reserve": 0,
-    "min_persistent_entry_ttl": 4096,
-    "min_temp_entry_ttl": 16,
-    "max_entry_ttl": 6312000,
+    "base_reserve": 10,
+    "min_persistent_entry_ttl": 100,
+    "min_temp_entry_ttl": 100,
+    "max_entry_ttl": 700000,
     "ledger_entries": [
       [
         {
@@ -111,7 +146,7 @@
                                     "symbol": "timestamp"
                                   },
                                   "val": {
-                                    "u64": 0
+                                    "u64": 1000
                                   }
                                 }
                               ]
@@ -130,7 +165,7 @@
                                 "symbol": "bills_percent"
                               },
                               "val": {
-                                "u32": 15
+                                "u32": 20
                               }
                             },
                             {
@@ -146,7 +181,7 @@
                                 "symbol": "insurance_percent"
                               },
                               "val": {
-                                "u32": 10
+                                "u32": 15
                               }
                             },
                             {
@@ -170,7 +205,7 @@
                                 "symbol": "spending_percent"
                               },
                               "val": {
-                                "u32": 50
+                                "u32": 40
                               }
                             },
                             {
@@ -178,7 +213,7 @@
                                 "symbol": "timestamp"
                               },
                               "val": {
-                                "u64": 0
+                                "u64": 1000
                               }
                             }
                           ]
@@ -208,16 +243,16 @@
                         "val": {
                           "vec": [
                             {
-                              "u32": 50
+                              "u32": 40
                             },
                             {
                               "u32": 25
                             },
                             {
-                              "u32": 15
+                              "u32": 20
                             },
                             {
-                              "u32": 10
+                              "u32": 15
                             }
                           ]
                         }
@@ -229,7 +264,7 @@
             },
             "ext": "v0"
           },
-          518400
+          1028400
         ]
       ],
       [
@@ -262,7 +297,40 @@
             },
             "ext": "v0"
           },
-          6311999
+          700099
+        ]
+      ],
+      [
+        {
+          "contract_data": {
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+            "key": {
+              "ledger_key_nonce": {
+                "nonce": 5541220902715666415
+              }
+            },
+            "durability": "temporary"
+          }
+        },
+        [
+          {
+            "last_modified_ledger_seq": 0,
+            "data": {
+              "contract_data": {
+                "ext": "v0",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+                "key": {
+                  "ledger_key_nonce": {
+                    "nonce": 5541220902715666415
+                  }
+                },
+                "durability": "temporary",
+                "val": "void"
+              }
+            },
+            "ext": "v0"
+          },
+          1209999
         ]
       ],
       [
@@ -283,7 +351,7 @@
             },
             "ext": "v0"
           },
-          518400
+          1028400
         ]
       ]
     ]
@@ -319,13 +387,13 @@
                   "u32": 50
                 },
                 {
-                  "u32": 25
+                  "u32": 30
                 },
                 {
                   "u32": 15
                 },
                 {
-                  "u32": 10
+                  "u32": 5
                 }
               ]
             }
@@ -399,14 +467,30 @@
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
               },
               {
-                "symbol": "calculate_split"
+                "symbol": "update_split"
               }
             ],
             "data": {
-              "i128": {
-                "hi": 0,
-                "lo": 2000
-              }
+              "vec": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "u64": 1
+                },
+                {
+                  "u32": 40
+                },
+                {
+                  "u32": 25
+                },
+                {
+                  "u32": 20
+                },
+                {
+                  "u32": 15
+                }
+              ]
             }
           }
         }
@@ -422,53 +506,41 @@
           "v0": {
             "topics": [
               {
-                "symbol": "calc"
+                "symbol": "init"
               }
             ],
             "data": {
               "map": [
                 {
                   "key": {
-                    "symbol": "bills_amount"
+                    "symbol": "bills_percent"
                   },
                   "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 300
-                    }
+                    "u32": 20
                   }
                 },
                 {
                   "key": {
-                    "symbol": "insurance_amount"
+                    "symbol": "insurance_percent"
                   },
                   "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 200
-                    }
+                    "u32": 15
                   }
                 },
                 {
                   "key": {
-                    "symbol": "savings_amount"
+                    "symbol": "savings_percent"
                   },
                   "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 500
-                    }
+                    "u32": 25
                   }
                 },
                 {
                   "key": {
-                    "symbol": "spending_amount"
+                    "symbol": "spending_percent"
                   },
                   "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 1000
-                    }
+                    "u32": 40
                   }
                 },
                 {
@@ -476,18 +548,7 @@
                     "symbol": "timestamp"
                   },
                   "val": {
-                    "u64": 0
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "total_amount"
-                  },
-                  "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 2000
-                    }
+                    "u64": 510000
                   }
                 }
               ]
@@ -511,16 +572,13 @@
               {
                 "vec": [
                   {
-                    "symbol": "Calculated"
+                    "symbol": "Updated"
                   }
                 ]
               }
             ],
             "data": {
-              "i128": {
-                "hi": 0,
-                "lo": 2000
-              }
+              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
             }
           }
         }
@@ -539,36 +597,11 @@
                 "symbol": "fn_return"
               },
               {
-                "symbol": "calculate_split"
+                "symbol": "update_split"
               }
             ],
             "data": {
-              "vec": [
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 1000
-                  }
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 500
-                  }
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 300
-                  }
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 200
-                  }
-                }
-              ]
+              "bool": true
             }
           }
         }
@@ -596,7 +629,7 @@
             "data": {
               "i128": {
                 "hi": 0,
-                "lo": 3000
+                "lo": 1000
               }
             }
           }
@@ -625,7 +658,7 @@
                   "val": {
                     "i128": {
                       "hi": 0,
-                      "lo": 450
+                      "lo": 200
                     }
                   }
                 },
@@ -636,7 +669,7 @@
                   "val": {
                     "i128": {
                       "hi": 0,
-                      "lo": 300
+                      "lo": 150
                     }
                   }
                 },
@@ -647,7 +680,7 @@
                   "val": {
                     "i128": {
                       "hi": 0,
-                      "lo": 750
+                      "lo": 250
                     }
                   }
                 },
@@ -658,7 +691,7 @@
                   "val": {
                     "i128": {
                       "hi": 0,
-                      "lo": 1500
+                      "lo": 400
                     }
                   }
                 },
@@ -667,7 +700,7 @@
                     "symbol": "timestamp"
                   },
                   "val": {
-                    "u64": 0
+                    "u64": 1020000
                   }
                 },
                 {
@@ -677,7 +710,7 @@
                   "val": {
                     "i128": {
                       "hi": 0,
-                      "lo": 3000
+                      "lo": 1000
                     }
                   }
                 }
@@ -710,7 +743,7 @@
             "data": {
               "i128": {
                 "hi": 0,
-                "lo": 3000
+                "lo": 1000
               }
             }
           }
@@ -738,25 +771,129 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 1500
+                    "lo": 400
                   }
                 },
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 750
+                    "lo": 250
                   }
                 },
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 450
+                    "lo": 200
                   }
                 },
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 300
+                    "lo": 150
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": null,
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
+              },
+              {
+                "symbol": "get_config"
+              }
+            ],
+            "data": "void"
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "get_config"
+              }
+            ],
+            "data": {
+              "map": [
+                {
+                  "key": {
+                    "symbol": "bills_percent"
+                  },
+                  "val": {
+                    "u32": 20
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "initialized"
+                  },
+                  "val": {
+                    "bool": true
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "insurance_percent"
+                  },
+                  "val": {
+                    "u32": 15
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "owner"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "savings_percent"
+                  },
+                  "val": {
+                    "u32": 25
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "spending_percent"
+                  },
+                  "val": {
+                    "u32": 40
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "timestamp"
+                  },
+                  "val": {
+                    "u64": 1000
                   }
                 }
               ]

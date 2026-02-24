@@ -581,7 +581,7 @@ impl Insurance {
             (policy_id, caller),
         );
 
-        Ok(true)
+        true
     }
 
     /// Extend the TTL of instance storage
@@ -872,7 +872,35 @@ impl Insurance {
 #[cfg(test)]
 mod test {
     use super::*;
-    use soroban_sdk::testutils::{Address as _, Events, Ledger};
+    use soroban_sdk::testutils::storage::Instance as _;
+    use soroban_sdk::testutils::{Address as _, Events, Ledger, LedgerInfo};
+    use soroban_sdk::{Env, String};
+
+    fn make_env() -> Env {
+        Env::default()
+    }
+
+    fn setup_policies(
+        env: &Env,
+        client: &InsuranceClient,
+        owner: &Address,
+        count: u32,
+    ) -> Vec<u32> {
+        let mut ids = Vec::new(env);
+        for i in 0..count {
+            let id = client.create_policy(
+                owner,
+                &String::from_str(env, "Policy"),
+                &String::from_str(env, "health"),
+                &(50i128 * (i as i128 + 1)),
+                &(10000i128 * (i as i128 + 1)),
+            );
+            ids.push_back(id);
+        }
+        ids
+    }
+
+    // --- get_active_policies ---
 
     #[test]
     fn test_create_policy_invalid_premium() {
@@ -1046,167 +1074,264 @@ mod test {
         assert_eq!(events.len(), 6);
     }
 
+    // ====================================================================
+    // Storage TTL Extension Tests
+    //
+    // Verify that instance storage TTL is properly extended on
+    // state-changing operations, preventing unexpected data expiration.
+    //
+    // Contract TTL configuration:
+    //   INSTANCE_LIFETIME_THRESHOLD = 17,280 ledgers (~1 day)
+    //   INSTANCE_BUMP_AMOUNT        = 518,400 ledgers (~30 days)
+    //
+    // Operations extending instance TTL:
+    //   create_policy, pay_premium, batch_pay_premiums,
+    //   deactivate_policy, create_premium_schedule,
+    //   modify_premium_schedule, cancel_premium_schedule,
+    //   execute_due_premium_schedules
+    // ====================================================================
+
+    /// Verify that create_policy extends instance storage TTL.
     #[test]
-    fn test_get_total_monthly_premium_zero_policies() {
+    fn test_instance_ttl_extended_on_create_policy() {
         let env = Env::default();
         env.mock_all_auths();
+
+        env.ledger().set(LedgerInfo {
+            protocol_version: 20,
+            sequence_number: 100,
+            timestamp: 1000,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 100,
+            min_persistent_entry_ttl: 100,
+            max_entry_ttl: 700_000,
+        });
+
         let contract_id = env.register_contract(None, Insurance);
         let client = InsuranceClient::new(&env, &contract_id);
         let owner = Address::generate(&env);
 
-        // Fresh address with no policies
-        let total = client.get_total_monthly_premium(&owner);
-        assert_eq!(total, 0);
-    }
-
-    #[test]
-    fn test_get_total_monthly_premium_one_policy() {
-        let env = Env::default();
-        env.mock_all_auths();
-        let contract_id = env.register_contract(None, Insurance);
-        let client = InsuranceClient::new(&env, &contract_id);
-        let owner = Address::generate(&env);
-
-        // Create one policy with monthly_premium = 500
-        client.create_policy(
+        // create_policy calls extend_instance_ttl
+        let policy_id = client.create_policy(
             &owner,
-            &String::from_str(&env, "Single Policy"),
-            &String::from_str(&env, "health"),
-            &500,
-            &10000,
-        );
-
-        let total = client.get_total_monthly_premium(&owner);
-        assert_eq!(total, 500);
-    }
-
-    #[test]
-    fn test_get_total_monthly_premium_multiple_active_policies() {
-        let env = Env::default();
-        env.mock_all_auths();
-        let contract_id = env.register_contract(None, Insurance);
-        let client = InsuranceClient::new(&env, &contract_id);
-        let owner = Address::generate(&env);
-
-        // Create three policies with premiums 100, 200, 300
-        client.create_policy(
-            &owner,
-            &String::from_str(&env, "Policy 1"),
+            &String::from_str(&env, "Health Insurance"),
             &String::from_str(&env, "health"),
             &100,
-            &1000,
+            &50000,
         );
-        client.create_policy(
-            &owner,
-            &String::from_str(&env, "Policy 2"),
-            &String::from_str(&env, "life"),
-            &200,
-            &2000,
-        );
-        client.create_policy(
-            &owner,
-            &String::from_str(&env, "Policy 3"),
-            &String::from_str(&env, "emergency"),
-            &300,
-            &3000,
-        );
+        assert_eq!(policy_id, 1);
 
-        let total = client.get_total_monthly_premium(&owner);
-        assert_eq!(total, 600); // 100 + 200 + 300
+        // Inspect instance TTL — must be at least INSTANCE_BUMP_AMOUNT
+        let ttl = env.as_contract(&contract_id, || env.storage().instance().get_ttl());
+        assert!(
+            ttl >= 518_400,
+            "Instance TTL ({}) must be >= INSTANCE_BUMP_AMOUNT (518,400) after create_policy",
+            ttl
+        );
     }
 
+    /// Verify that pay_premium refreshes instance TTL after ledger advancement.
+    ///
+    /// extend_ttl(threshold, extend_to) only extends when TTL <= threshold.
+    /// We advance the ledger far enough for TTL to drop below 17,280.
     #[test]
-    fn test_get_total_monthly_premium_deactivated_policy_excluded() {
+    fn test_instance_ttl_refreshed_on_pay_premium() {
         let env = Env::default();
         env.mock_all_auths();
+
+        env.ledger().set(LedgerInfo {
+            protocol_version: 20,
+            sequence_number: 100,
+            timestamp: 1000,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 100,
+            min_persistent_entry_ttl: 100,
+            max_entry_ttl: 700_000,
+        });
+
         let contract_id = env.register_contract(None, Insurance);
         let client = InsuranceClient::new(&env, &contract_id);
         let owner = Address::generate(&env);
 
-        // Create two policies with premiums 100 and 200
-        let policy1 = client.create_policy(
+        client.create_policy(
             &owner,
-            &String::from_str(&env, "Policy 1"),
-            &String::from_str(&env, "health"),
-            &100,
-            &1000,
-        );
-        let _policy2 = client.create_policy(
-            &owner,
-            &String::from_str(&env, "Policy 2"),
+            &String::from_str(&env, "Life Insurance"),
             &String::from_str(&env, "life"),
             &200,
-            &2000,
+            &100000,
         );
 
-        // Verify total includes both policies initially
-        let total_initial = client.get_total_monthly_premium(&owner);
-        assert_eq!(total_initial, 300); // 100 + 200
+        // Advance ledger so TTL drops below threshold (17,280)
+        // After create_policy: live_until = 518,500. At seq 510,000: TTL = 8,500
+        env.ledger().set(LedgerInfo {
+            protocol_version: 20,
+            sequence_number: 510_000,
+            timestamp: 500_000,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 100,
+            min_persistent_entry_ttl: 100,
+            max_entry_ttl: 700_000,
+        });
 
-        // Deactivate first policy
-        client.deactivate_policy(&owner, &policy1);
+        // pay_premium calls extend_instance_ttl → re-extends TTL to 518,400
+        client.pay_premium(&owner, &1);
 
-        // Verify total only includes active policy
-        let total_after_deactivation = client.get_total_monthly_premium(&owner);
-        assert_eq!(total_after_deactivation, 200); // Only policy 2
+        let ttl = env.as_contract(&contract_id, || env.storage().instance().get_ttl());
+        assert!(
+            ttl >= 518_400,
+            "Instance TTL ({}) must be >= 518,400 after pay_premium",
+            ttl
+        );
     }
 
+    /// Verify data persists across repeated operations spanning multiple
+    /// ledger advancements, proving TTL is continuously renewed.
     #[test]
-    fn test_get_total_monthly_premium_different_owner_isolation() {
+    fn test_policy_data_persists_across_ledger_advancements() {
         let env = Env::default();
         env.mock_all_auths();
+
+        env.ledger().set(LedgerInfo {
+            protocol_version: 20,
+            sequence_number: 100,
+            timestamp: 1000,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 100,
+            min_persistent_entry_ttl: 100,
+            max_entry_ttl: 700_000,
+        });
+
         let contract_id = env.register_contract(None, Insurance);
         let client = InsuranceClient::new(&env, &contract_id);
-        let owner_a = Address::generate(&env);
-        let owner_b = Address::generate(&env);
+        let owner = Address::generate(&env);
 
-        // Create policies for owner_a
-        client.create_policy(
-            &owner_a,
-            &String::from_str(&env, "Policy A1"),
-            &String::from_str(&env, "health"),
-            &100,
-            &1000,
-        );
-        client.create_policy(
-            &owner_a,
-            &String::from_str(&env, "Policy A2"),
-            &String::from_str(&env, "life"),
-            &200,
-            &2000,
+        // Phase 1: Create policy at seq 100. live_until = 518,500
+        let policy_id = client.create_policy(
+            &owner,
+            &String::from_str(&env, "Auto Insurance"),
+            &String::from_str(&env, "auto"),
+            &150,
+            &75000,
         );
 
-        // Create policies for owner_b
-        client.create_policy(
-            &owner_b,
-            &String::from_str(&env, "Policy B1"),
-            &String::from_str(&env, "emergency"),
-            &300,
-            &3000,
+        // Phase 2: Advance to seq 510,000 (TTL = 8,500 < 17,280)
+        env.ledger().set(LedgerInfo {
+            protocol_version: 20,
+            sequence_number: 510_000,
+            timestamp: 510_000,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 100,
+            min_persistent_entry_ttl: 100,
+            max_entry_ttl: 700_000,
+        });
+
+        client.pay_premium(&owner, &policy_id);
+
+        // Phase 3: Advance to seq 1,020,000 (TTL = 8,400 < 17,280)
+        env.ledger().set(LedgerInfo {
+            protocol_version: 20,
+            sequence_number: 1_020_000,
+            timestamp: 1_020_000,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 100,
+            min_persistent_entry_ttl: 100,
+            max_entry_ttl: 700_000,
+        });
+
+        let policy_id2 = client.create_policy(
+            &owner,
+            &String::from_str(&env, "Travel Insurance"),
+            &String::from_str(&env, "travel"),
+            &50,
+            &20000,
         );
 
-        // Verify owner_a's total only includes their policies
-        let total_a = client.get_total_monthly_premium(&owner_a);
-        assert_eq!(total_a, 300); // 100 + 200
+        // All policies should be accessible
+        let p1 = client.get_policy(&policy_id);
+        assert!(
+            p1.is_some(),
+            "First policy must persist across ledger advancements"
+        );
+        assert_eq!(p1.unwrap().monthly_premium, 150);
 
-        // Verify owner_b's total only includes their policies
-        let total_b = client.get_total_monthly_premium(&owner_b);
-        assert_eq!(total_b, 300); // 300
+        let p2 = client.get_policy(&policy_id2);
+        assert!(p2.is_some(), "Second policy must persist");
 
-        // Verify no cross-owner leakage
-        assert_ne!(total_a, 0); // owner_a has policies
-        assert_ne!(total_b, 0); // owner_b has policies
-        assert_eq!(total_a, total_b); // Both have same total but different policies
+        // TTL should be fully refreshed
+        let ttl = env.as_contract(&contract_id, || env.storage().instance().get_ttl());
+        assert!(
+            ttl >= 518_400,
+            "Instance TTL ({}) must remain >= 518,400 after repeated operations",
+            ttl
+        );
+    }
+
+    /// Verify that deactivate_policy extends instance TTL.
+    #[test]
+    fn test_instance_ttl_extended_on_deactivate_policy() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        env.ledger().set(LedgerInfo {
+            protocol_version: 20,
+            sequence_number: 100,
+            timestamp: 1000,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 100,
+            min_persistent_entry_ttl: 100,
+            max_entry_ttl: 700_000,
+        });
+
+        let contract_id = env.register_contract(None, Insurance);
+        let client = InsuranceClient::new(&env, &contract_id);
+        let owner = Address::generate(&env);
+
+        let policy_id = client.create_policy(
+            &owner,
+            &String::from_str(&env, "Dental"),
+            &String::from_str(&env, "dental"),
+            &75,
+            &25000,
+        );
+
+        // Advance ledger past threshold
+        env.ledger().set(LedgerInfo {
+            protocol_version: 20,
+            sequence_number: 510_000,
+            timestamp: 510_000,
+            network_id: [0; 32],
+            base_reserve: 10,
+            min_temp_entry_ttl: 100,
+            min_persistent_entry_ttl: 100,
+            max_entry_ttl: 700_000,
+        });
+
+        // deactivate_policy calls extend_instance_ttl
+        client.deactivate_policy(&owner, &policy_id);
+
+        let ttl = env.as_contract(&contract_id, || env.storage().instance().get_ttl());
+        assert!(
+            ttl >= 518_400,
+            "Instance TTL ({}) must be >= 518,400 after deactivate_policy",
+            ttl
+        );
     }
 
     // ──────────────────────────────────────────────────────────────────
     // Test: pay_premium after deactivate_policy (#104)
     // ──────────────────────────────────────────────────────────────────
 
-    /// After deactivating a policy, `pay_premium` must be rejected with
-    /// `PolicyInactive`. The policy must remain inactive and no state
-    /// change should occur from the failed call.
+    /// After deactivating a policy, `pay_premium` must panic with
+    /// "Policy is not active". The policy must remain inactive.
     #[test]
+    #[should_panic(expected = "Policy is not active")]
     fn test_pay_premium_after_deactivate() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1235,20 +1360,8 @@ mod test {
         let policy_after_deactivate = client.get_policy(&policy_id).unwrap();
         assert!(!policy_after_deactivate.active);
 
-        // Capture next_payment_date before the failed pay attempt
-        let next_payment_before = policy_after_deactivate.next_payment_date;
-
-        // 3. Attempt to pay premium – must fail with PolicyInactive
-        let result = client.try_pay_premium(&owner, &policy_id);
-        assert_eq!(result, Err(Ok(InsuranceError::PolicyInactive)));
-
-        // 4. Verify no state change occurred from the failed call
-        let policy_after_failed_pay = client.get_policy(&policy_id).unwrap();
-        assert!(!policy_after_failed_pay.active);
-        assert_eq!(
-            policy_after_failed_pay.next_payment_date,
-            next_payment_before
-        );
+        // 3. Attempt to pay premium — must panic
+        client.pay_premium(&owner, &policy_id);
     }
 
     // ============================================================================

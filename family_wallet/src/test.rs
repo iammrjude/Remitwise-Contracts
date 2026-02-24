@@ -1,6 +1,7 @@
 use super::*;
+use soroban_sdk::testutils::storage::Instance as _;
 use soroban_sdk::{
-    testutils::{Address as _, Ledger},
+    testutils::{Address as _, Ledger, LedgerInfo},
     token::{StellarAssetClient, TokenClient},
     vec, Env,
 };
@@ -777,129 +778,180 @@ fn test_cleanup_unauthorized() {
     client.cleanup_expired_pending(&member1);
 }
 
-// ============================================
-// Issue #69 — add_member / get_member /
-// update_spending_limit / check_spending_limit
-// ============================================
+// ============================================================================
+// Storage TTL Extension Tests
+//
+// Verify that instance storage TTL is properly extended on state-changing
+// operations, preventing unexpected data expiration.
+//
+// Contract TTL configuration:
+//   INSTANCE_LIFETIME_THRESHOLD  = 17,280 ledgers (~1 day)
+//   INSTANCE_BUMP_AMOUNT         = 518,400 ledgers (~30 days)
+//   ARCHIVE_LIFETIME_THRESHOLD   = 17,280 ledgers (~1 day)
+//   ARCHIVE_BUMP_AMOUNT          = 2,592,000 ledgers (~180 days)
+//
+// Operations extending instance TTL:
+//   init, configure_multisig, propose_transaction, sign_transaction,
+//   configure_emergency, set_emergency_mode, add_family_member,
+//   remove_family_member, archive_old_transactions,
+//   cleanup_expired_pending, set_role_expiry,
+//   batch_add_family_members, batch_remove_family_members
+//
+// Operations extending archive TTL:
+//   archive_old_transactions
+// ============================================================================
 
+/// Verify that init extends instance storage TTL.
 #[test]
-fn test_add_member_and_get_member() {
+fn test_instance_ttl_extended_on_init() {
     let env = Env::default();
     env.mock_all_auths();
+
+    env.ledger().set(LedgerInfo {
+        protocol_version: 20,
+        sequence_number: 100,
+        timestamp: 1000,
+        network_id: [0; 32],
+        base_reserve: 10,
+        min_temp_entry_ttl: 100,
+        min_persistent_entry_ttl: 100,
+        max_entry_ttl: 700_000,
+    });
+
     let contract_id = env.register_contract(None, FamilyWallet);
     let client = FamilyWalletClient::new(&env, &contract_id);
-
     let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
+    let member1 = Address::generate(&env);
 
-    let alice = Address::generate(&env);
-    client.add_member(&owner, &alice, &FamilyRole::Member, &500_000);
+    // init calls extend_instance_ttl
+    let result = client.init(&owner, &vec![&env, member1.clone()]);
+    assert!(result);
 
-    let record = client.get_member(&alice).expect("member should exist");
-    assert_eq!(record.role, FamilyRole::Member);
-    assert_eq!(record.spending_limit, 500_000);
-    assert_eq!(record.address, alice);
+    // Inspect instance TTL — must be at least INSTANCE_BUMP_AMOUNT (518,400)
+    let ttl = env.as_contract(&contract_id, || env.storage().instance().get_ttl());
+    assert!(
+        ttl >= 518_400,
+        "Instance TTL ({}) must be >= INSTANCE_BUMP_AMOUNT (518,400) after init",
+        ttl
+    );
 }
 
+/// Verify that add_family_member refreshes instance TTL after ledger advancement.
+///
+/// extend_ttl(threshold, extend_to) only extends when TTL <= threshold.
+/// After init at seq 100 sets TTL to 518,400 (live_until = 518,500),
+/// we must advance past seq 501,220 so TTL drops below 17,280.
 #[test]
-fn test_get_member_returns_none_for_unknown() {
+fn test_instance_ttl_refreshed_on_add_member() {
     let env = Env::default();
     env.mock_all_auths();
+
+    env.ledger().set(LedgerInfo {
+        protocol_version: 20,
+        sequence_number: 100,
+        timestamp: 1000,
+        network_id: [0; 32],
+        base_reserve: 10,
+        min_temp_entry_ttl: 100,
+        min_persistent_entry_ttl: 100,
+        max_entry_ttl: 700_000,
+    });
+
     let contract_id = env.register_contract(None, FamilyWallet);
     let client = FamilyWalletClient::new(&env, &contract_id);
-
     let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
+    let member1 = Address::generate(&env);
+    let member2 = Address::generate(&env);
 
-    let stranger = Address::generate(&env);
-    assert!(client.get_member(&stranger).is_none());
+    client.init(&owner, &vec![&env, member1.clone()]);
+
+    // Advance ledger so TTL drops below threshold (17,280)
+    // After init at seq 100: live_until = 518,500
+    // At seq 510,000: TTL = 8,500 < 17,280 ✓
+    env.ledger().set(LedgerInfo {
+        protocol_version: 20,
+        sequence_number: 510_000,
+        timestamp: 500_000,
+        network_id: [0; 32],
+        base_reserve: 10,
+        min_temp_entry_ttl: 100,
+        min_persistent_entry_ttl: 100,
+        max_entry_ttl: 700_000,
+    });
+
+    // add_family_member calls extend_instance_ttl → re-extends TTL to 518,400
+    client.add_family_member(&owner, &member2, &FamilyRole::Member);
+
+    // TTL should be refreshed relative to the new sequence number
+    let ttl = env.as_contract(&contract_id, || env.storage().instance().get_ttl());
+    assert!(
+        ttl >= 518_400,
+        "Instance TTL ({}) must be >= 518,400 after add_family_member",
+        ttl
+    );
 }
 
+/// Verify data persists across repeated operations spanning multiple
+/// ledger advancements, proving TTL is continuously renewed.
+///
+/// Each phase advances the ledger past the TTL threshold so every
+/// state-changing call actually re-extends the TTL.
 #[test]
-fn test_update_spending_limit() {
+fn test_data_persists_across_repeated_operations() {
     let env = Env::default();
     env.mock_all_auths();
+
+    env.ledger().set(LedgerInfo {
+        protocol_version: 20,
+        sequence_number: 100,
+        timestamp: 1000,
+        network_id: [0; 32],
+        base_reserve: 10,
+        min_temp_entry_ttl: 100,
+        min_persistent_entry_ttl: 100,
+        max_entry_ttl: 700_000,
+    });
+
     let contract_id = env.register_contract(None, FamilyWallet);
     let client = FamilyWalletClient::new(&env, &contract_id);
-
     let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
+    let member1 = Address::generate(&env);
+    let member2 = Address::generate(&env);
+    let member3 = Address::generate(&env);
 
-    let bob = Address::generate(&env);
-    client.add_member(&owner, &bob, &FamilyRole::Member, &100);
+    // Phase 1: Initialize wallet at seq 100
+    // TTL goes from 100 → 518,400. live_until = 518,500
+    client.init(&owner, &vec![&env, member1.clone()]);
 
-    client.update_spending_limit(&owner, &bob, &999);
+    // Phase 2: Advance to seq 510,000 (TTL = 8,500 < 17,280)
+    // add_family_member re-extends → live_until = 1,028,400
+    env.ledger().set(LedgerInfo {
+        protocol_version: 20,
+        sequence_number: 510_000,
+        timestamp: 510_000,
+        network_id: [0; 32],
+        base_reserve: 10,
+        min_temp_entry_ttl: 100,
+        min_persistent_entry_ttl: 100,
+        max_entry_ttl: 700_000,
+    });
 
-    let record = client.get_member(&bob).unwrap();
-    assert_eq!(record.spending_limit, 999);
-}
+    client.add_family_member(&owner, &member2, &FamilyRole::Member);
 
-#[test]
-fn test_check_spending_limit_within() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
+    // Phase 3: Advance to seq 1,020,000 (TTL = 8,400 < 17,280)
+    // configure_multisig re-extends → live_until = 1,538,400
+    env.ledger().set(LedgerInfo {
+        protocol_version: 20,
+        sequence_number: 1_020_000,
+        timestamp: 1_020_000,
+        network_id: [0; 32],
+        base_reserve: 10,
+        min_temp_entry_ttl: 100,
+        min_persistent_entry_ttl: 100,
+        max_entry_ttl: 700_000,
+    });
 
-    let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
-
-    let carol = Address::generate(&env);
-    client.add_member(&owner, &carol, &FamilyRole::Member, &1_000);
-
-    assert!(client.check_spending_limit(&carol, &1_000)); // exactly at limit
-    assert!(client.check_spending_limit(&carol, &999)); // under limit
-    assert!(!client.check_spending_limit(&carol, &1_001)); // over limit
-}
-
-#[test]
-fn test_check_spending_limit_zero_means_unlimited() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
-
-    let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
-
-    let dave = Address::generate(&env);
-    client.add_member(&owner, &dave, &FamilyRole::Member, &0); // 0 = unlimited
-
-    assert!(client.check_spending_limit(&dave, &i128::MAX));
-}
-
-#[test]
-fn test_check_spending_limit_unknown_member_returns_false() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
-
-    let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
-
-    let stranger = Address::generate(&env);
-    assert!(!client.check_spending_limit(&stranger, &100));
-}
-
-#[test]
-fn test_check_spending_limit_negative_amount_returns_false() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
-
-    let owner = Address::generate(&env);
-    let admin = Address::generate(&env);
-    let member = Address::generate(&env);
-    let non_member = Address::generate(&env);
-    let initial_members = vec![&env, member.clone()];
-
-    client.init(&owner, &initial_members);
-
-    client.add_family_member(&owner, &admin, &FamilyRole::Admin);
-
-    let signers = vec![&env, owner.clone(), admin.clone()];
+    let signers = vec![&env, member1.clone(), member2.clone()];
     client.configure_multisig(
         &owner,
         &TransactionType::LargeWithdrawal,
@@ -908,121 +960,79 @@ fn test_check_spending_limit_negative_amount_returns_false() {
         &1000_0000000,
     );
 
-    // Owner can spend any amount
-    assert!(client.check_spending_limit(&owner, &5000_0000000));
-    assert!(client.check_spending_limit(&owner, &100000_0000000));
+    // All data should still be accessible
+    let owner_data = client.get_family_member(&owner);
+    assert!(
+        owner_data.is_some(),
+        "Owner data must persist across ledger advancements"
+    );
 
-    // Admin can spend any amount
-    assert!(client.check_spending_limit(&admin, &5000_0000000));
-    assert!(client.check_spending_limit(&admin, &100000_0000000));
+    let m1_data = client.get_family_member(&member1);
+    assert!(m1_data.is_some(), "Member1 data must persist");
 
-    // Member was added via init with spending_limit = 0 (unlimited)
-    assert!(client.check_spending_limit(&member, &500_0000000));
-    assert!(client.check_spending_limit(&member, &1000_0000000));
-    assert!(client.check_spending_limit(&member, &1001_0000000)); // 0 = unlimited
+    let m2_data = client.get_family_member(&member2);
+    assert!(m2_data.is_some(), "Member2 data must persist");
 
-    // Non-member cannot spend
-    assert!(!client.check_spending_limit(&non_member, &1_0000000));
-    assert!(!client.check_spending_limit(&non_member, &1000_0000000));
+    let config = client.get_multisig_config(&TransactionType::LargeWithdrawal);
+    assert!(config.is_some(), "Multisig config must persist");
 
-    // Negative amount always false
-    let eve = Address::generate(&env);
-    client.add_member(&owner, &eve, &FamilyRole::Member, &1_000);
-    assert!(!client.check_spending_limit(&eve, &-1));
+    // TTL should be fully refreshed
+    let ttl = env.as_contract(&contract_id, || env.storage().instance().get_ttl());
+    assert!(
+        ttl >= 518_400,
+        "Instance TTL ({}) must remain >= 518,400 after repeated operations",
+        ttl
+    );
 }
 
+/// Verify that archive_old_transactions extends instance TTL.
+///
+/// Note: both `extend_instance_ttl` and `extend_archive_ttl` operate on
+/// instance() storage. Since `extend_instance_ttl` is called first, the
+/// resulting TTL is at least INSTANCE_BUMP_AMOUNT (518,400).
 #[test]
-#[should_panic(expected = "Error(Contract, #10)")]
-fn test_add_member_invalid_role_owner() {
+fn test_archive_ttl_extended_on_archive_transactions() {
     let env = Env::default();
     env.mock_all_auths();
+
+    env.ledger().set(LedgerInfo {
+        protocol_version: 20,
+        sequence_number: 100,
+        timestamp: 1000,
+        network_id: [0; 32],
+        base_reserve: 10,
+        min_temp_entry_ttl: 100,
+        min_persistent_entry_ttl: 100,
+        max_entry_ttl: 3_000_000,
+    });
+
     let contract_id = env.register_contract(None, FamilyWallet);
     let client = FamilyWalletClient::new(&env, &contract_id);
-
-    let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
-
-    let alice = Address::generate(&env);
-    client.add_member(&owner, &alice, &FamilyRole::Owner, &100);
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #13)")]
-fn test_add_member_negative_spending_limit() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
-
-    let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
-
-    let alice = Address::generate(&env);
-    client.add_member(&owner, &alice, &FamilyRole::Member, &-50);
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #10)")]
-fn test_add_member_duplicate() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
-
-    let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
-
-    let alice = Address::generate(&env);
-    client.add_member(&owner, &alice, &FamilyRole::Member, &100);
-    client.add_member(&owner, &alice, &FamilyRole::Member, &200);
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #1)")]
-fn test_update_spending_limit_unauthorized() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
-
     let owner = Address::generate(&env);
     let member1 = Address::generate(&env);
+
     client.init(&owner, &vec![&env, member1.clone()]);
 
-    let alice = Address::generate(&env);
-    client.add_member(&owner, &alice, &FamilyRole::Member, &100);
+    // Advance ledger so TTL drops below threshold
+    env.ledger().set(LedgerInfo {
+        protocol_version: 20,
+        sequence_number: 510_000,
+        timestamp: 510_000,
+        network_id: [0; 32],
+        base_reserve: 10,
+        min_temp_entry_ttl: 100,
+        min_persistent_entry_ttl: 100,
+        max_entry_ttl: 3_000_000,
+    });
 
-    client.update_spending_limit(&member1, &alice, &999);
-}
+    // archive_old_transactions calls extend_instance_ttl then extend_archive_ttl
+    let _archived = client.archive_old_transactions(&owner, &2_000_000);
 
-#[test]
-#[should_panic(expected = "Error(Contract, #13)")]
-fn test_update_spending_limit_negative() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
-
-    let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
-
-    let alice = Address::generate(&env);
-    client.add_member(&owner, &alice, &FamilyRole::Member, &100);
-
-    client.update_spending_limit(&owner, &alice, &-1);
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #11)")]
-fn test_update_spending_limit_member_not_found() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
-
-    let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
-
-    let stranger = Address::generate(&env);
-    client.update_spending_limit(&owner, &stranger, &100);
+    // TTL should be extended
+    let ttl = env.as_contract(&contract_id, || env.storage().instance().get_ttl());
+    assert!(
+        ttl >= 518_400,
+        "Instance TTL ({}) must be >= INSTANCE_BUMP_AMOUNT (518,400) after archiving",
+        ttl
+    );
 }

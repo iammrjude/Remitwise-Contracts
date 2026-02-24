@@ -17,21 +17,21 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "string": "Health Plan"
+                  "string": "Life Insurance"
                 },
                 {
-                  "string": "health"
+                  "string": "life"
                 },
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 150
+                    "lo": 200
                   }
                 },
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 50000
+                    "lo": 100000
                   }
                 }
               ]
@@ -41,7 +41,6 @@
         }
       ]
     ],
-    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
@@ -49,7 +48,7 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "deactivate_policy",
+              "function_name": "pay_premium",
               "args": [
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -64,18 +63,17 @@
         }
       ]
     ],
-    [],
     []
   ],
   "ledger": {
-    "protocol_version": 21,
-    "sequence_number": 0,
-    "timestamp": 0,
+    "protocol_version": 20,
+    "sequence_number": 510000,
+    "timestamp": 500000,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
-    "base_reserve": 0,
-    "min_persistent_entry_ttl": 4096,
-    "min_temp_entry_ttl": 16,
-    "max_entry_ttl": 6312000,
+    "base_reserve": 10,
+    "min_persistent_entry_ttl": 100,
+    "min_temp_entry_ttl": 100,
+    "max_entry_ttl": 700000,
     "ledger_entries": [
       [
         {
@@ -125,7 +123,7 @@
                                       "symbol": "active"
                                     },
                                     "val": {
-                                      "bool": false
+                                      "bool": true
                                     }
                                   },
                                   {
@@ -135,7 +133,7 @@
                                     "val": {
                                       "i128": {
                                         "hi": 0,
-                                        "lo": 50000
+                                        "lo": 100000
                                       }
                                     }
                                   },
@@ -144,7 +142,7 @@
                                       "symbol": "coverage_type"
                                     },
                                     "val": {
-                                      "string": "health"
+                                      "string": "life"
                                     }
                                   },
                                   {
@@ -162,7 +160,7 @@
                                     "val": {
                                       "i128": {
                                         "hi": 0,
-                                        "lo": 150
+                                        "lo": 200
                                       }
                                     }
                                   },
@@ -171,7 +169,7 @@
                                       "symbol": "name"
                                     },
                                     "val": {
-                                      "string": "Health Plan"
+                                      "string": "Life Insurance"
                                     }
                                   },
                                   {
@@ -179,7 +177,7 @@
                                       "symbol": "next_payment_date"
                                     },
                                     "val": {
-                                      "u64": 2592000
+                                      "u64": 3092000
                                     }
                                   },
                                   {
@@ -209,7 +207,7 @@
             },
             "ext": "v0"
           },
-          518400
+          1028400
         ]
       ],
       [
@@ -242,7 +240,7 @@
             },
             "ext": "v0"
           },
-          6311999
+          700099
         ]
       ],
       [
@@ -275,7 +273,7 @@
             },
             "ext": "v0"
           },
-          6311999
+          1209999
         ]
       ],
       [
@@ -296,7 +294,7 @@
             },
             "ext": "v0"
           },
-          518400
+          1028400
         ]
       ]
     ]
@@ -326,21 +324,21 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "string": "Health Plan"
+                  "string": "Life Insurance"
                 },
                 {
-                  "string": "health"
+                  "string": "life"
                 },
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 150
+                    "lo": 200
                   }
                 },
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 50000
+                    "lo": 100000
                   }
                 }
               ]
@@ -371,7 +369,7 @@
                   "val": {
                     "i128": {
                       "hi": 0,
-                      "lo": 50000
+                      "lo": 100000
                     }
                   }
                 },
@@ -380,7 +378,7 @@
                     "symbol": "coverage_type"
                   },
                   "val": {
-                    "string": "health"
+                    "string": "life"
                   }
                 },
                 {
@@ -390,7 +388,7 @@
                   "val": {
                     "i128": {
                       "hi": 0,
-                      "lo": 150
+                      "lo": 200
                     }
                   }
                 },
@@ -399,7 +397,7 @@
                     "symbol": "name"
                   },
                   "val": {
-                    "string": "Health Plan"
+                    "string": "Life Insurance"
                   }
                 },
                 {
@@ -415,7 +413,7 @@
                     "symbol": "timestamp"
                   },
                   "val": {
-                    "u64": 0
+                    "u64": 1000
                   }
                 }
               ]
@@ -497,133 +495,7 @@
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
               },
               {
-                "symbol": "get_policy"
-              }
-            ],
-            "data": {
-              "u32": 1
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "fn_return"
-              },
-              {
-                "symbol": "get_policy"
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "active"
-                  },
-                  "val": {
-                    "bool": true
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "coverage_amount"
-                  },
-                  "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 50000
-                    }
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "coverage_type"
-                  },
-                  "val": {
-                    "string": "health"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "id"
-                  },
-                  "val": {
-                    "u32": 1
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "monthly_premium"
-                  },
-                  "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 150
-                    }
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "name"
-                  },
-                  "val": {
-                    "string": "Health Plan"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "next_payment_date"
-                  },
-                  "val": {
-                    "u64": 2592000
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "owner"
-                  },
-                  "val": {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "schedule_id"
-                  },
-                  "val": "void"
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": null,
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "fn_call"
-              },
-              {
-                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
-              },
-              {
-                "symbol": "deactivate_policy"
+                "symbol": "pay_premium"
               }
             ],
             "data": {
@@ -650,17 +522,36 @@
           "v0": {
             "topics": [
               {
-                "symbol": "deactive"
+                "symbol": "paid"
               }
             ],
             "data": {
               "map": [
                 {
                   "key": {
+                    "symbol": "amount"
+                  },
+                  "val": {
+                    "i128": {
+                      "hi": 0,
+                      "lo": 200
+                    }
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "name"
                   },
                   "val": {
-                    "string": "Health Plan"
+                    "string": "Life Insurance"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "next_payment_date"
+                  },
+                  "val": {
+                    "u64": 3092000
                   }
                 },
                 {
@@ -676,7 +567,7 @@
                     "symbol": "timestamp"
                   },
                   "val": {
-                    "u64": 0
+                    "u64": 500000
                   }
                 }
               ]
@@ -695,12 +586,12 @@
           "v0": {
             "topics": [
               {
-                "symbol": "insuranc"
+                "symbol": "insure"
               },
               {
                 "vec": [
                   {
-                    "symbol": "PolicyDeactivated"
+                    "symbol": "PremiumPaid"
                   }
                 ]
               }
@@ -732,292 +623,11 @@
                 "symbol": "fn_return"
               },
               {
-                "symbol": "deactivate_policy"
-              }
-            ],
-            "data": {
-              "bool": true
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": null,
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "fn_call"
-              },
-              {
-                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
-              },
-              {
-                "symbol": "get_policy"
-              }
-            ],
-            "data": {
-              "u32": 1
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "fn_return"
-              },
-              {
-                "symbol": "get_policy"
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "active"
-                  },
-                  "val": {
-                    "bool": false
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "coverage_amount"
-                  },
-                  "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 50000
-                    }
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "coverage_type"
-                  },
-                  "val": {
-                    "string": "health"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "id"
-                  },
-                  "val": {
-                    "u32": 1
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "monthly_premium"
-                  },
-                  "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 150
-                    }
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "name"
-                  },
-                  "val": {
-                    "string": "Health Plan"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "next_payment_date"
-                  },
-                  "val": {
-                    "u64": 2592000
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "owner"
-                  },
-                  "val": {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "schedule_id"
-                  },
-                  "val": "void"
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": null,
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "fn_call"
-              },
-              {
-                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
-              },
-              {
                 "symbol": "pay_premium"
               }
             ],
             "data": {
-              "vec": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                },
-                {
-                  "u32": 1
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "log"
-              }
-            ],
-            "data": {
-              "vec": [
-                {
-                  "string": "caught panic 'Policy is not active' from contract function 'Symbol(obj#195)'"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                },
-                {
-                  "u32": 1
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": true
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "error"
-              },
-              {
-                "error": {
-                  "wasm_vm": "invalid_action"
-                }
-              }
-            ],
-            "data": {
-              "string": "caught error from function"
-            }
-          }
-        }
-      },
-      "failed_call": true
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": null,
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "error"
-              },
-              {
-                "error": {
-                  "wasm_vm": "invalid_action"
-                }
-              }
-            ],
-            "data": {
-              "vec": [
-                {
-                  "string": "contract call failed"
-                },
-                {
-                  "symbol": "pay_premium"
-                },
-                {
-                  "vec": [
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                    },
-                    {
-                      "u32": 1
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": null,
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "error"
-              },
-              {
-                "error": {
-                  "wasm_vm": "invalid_action"
-                }
-              }
-            ],
-            "data": {
-              "string": "escalating error to panic"
+              "bool": true
             }
           }
         }
