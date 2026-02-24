@@ -98,6 +98,37 @@ pub enum SavingsGoalsError {
     Overflow = 6,
 }
 
+impl From<SavingsGoalsError> for soroban_sdk::Error {
+    fn from(err: SavingsGoalsError) -> Self {
+        match err {
+            SavingsGoalsError::InvalidAmount => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::InvalidInput,
+            )),
+            SavingsGoalsError::GoalNotFound => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::MissingValue,
+            )),
+            SavingsGoalsError::Unauthorized => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::InvalidAction,
+            )),
+            SavingsGoalsError::GoalLocked => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::InvalidAction,
+            )),
+            SavingsGoalsError::InsufficientBalance => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::InvalidInput,
+            )),
+            SavingsGoalsError::Overflow => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::ArithmeticOverflow,
+            )),
+        }
+    }
+}
+
 #[contracttype]
 #[derive(Clone)]
 pub enum SavingsEvent {
@@ -434,7 +465,12 @@ impl SavingsGoalContract {
     ///
     /// # Panics
     /// * If `caller` does not authorize the transaction
-    pub fn add_to_goal(env: Env, caller: Address, goal_id: u32, amount: i128) -> Result<i128, SavingsGoalsError> {
+    pub fn add_to_goal(
+        env: Env,
+        caller: Address,
+        goal_id: u32,
+        amount: i128,
+    ) -> Result<i128, SavingsGoalsError> {
         caller.require_auth();
         Self::require_not_paused(&env, pause_functions::ADD_TO_GOAL);
 
@@ -464,7 +500,10 @@ impl SavingsGoalContract {
             return Err(SavingsGoalsError::Unauthorized);
         }
 
-        goal.current_amount = goal.current_amount.checked_add(amount).ok_or(SavingsGoalsError::Overflow)?;
+        goal.current_amount = goal
+            .current_amount
+            .checked_add(amount)
+            .ok_or(SavingsGoalsError::Overflow)?;
         let new_total = goal.current_amount;
         let was_completed = new_total >= goal.target_amount;
         let previously_completed = (new_total - amount) >= goal.target_amount;
@@ -610,7 +649,12 @@ impl SavingsGoalContract {
     ///
     /// # Panics
     /// * If `caller` does not authorize the transaction
-    pub fn withdraw_from_goal(env: Env, caller: Address, goal_id: u32, amount: i128) -> Result<i128, SavingsGoalsError> {
+    pub fn withdraw_from_goal(
+        env: Env,
+        caller: Address,
+        goal_id: u32,
+        amount: i128,
+    ) -> Result<i128, SavingsGoalsError> {
         caller.require_auth();
         Self::require_not_paused(&env, pause_functions::WITHDRAW);
 
@@ -658,7 +702,10 @@ impl SavingsGoalContract {
             return Err(SavingsGoalsError::InsufficientBalance);
         }
 
-        goal.current_amount = goal.current_amount.checked_sub(amount).ok_or(SavingsGoalsError::Overflow)?;
+        goal.current_amount = goal
+            .current_amount
+            .checked_sub(amount)
+            .ok_or(SavingsGoalsError::Overflow)?;
         let new_amount = goal.current_amount;
 
         goals.set(goal_id, goal);

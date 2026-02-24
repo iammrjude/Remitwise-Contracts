@@ -109,6 +109,37 @@ pub enum InsuranceError {
     BatchTooLarge = 6,
 }
 
+impl From<InsuranceError> for soroban_sdk::Error {
+    fn from(err: InsuranceError) -> Self {
+        match err {
+            InsuranceError::InvalidPremium => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::InvalidInput,
+            )),
+            InsuranceError::InvalidCoverage => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::InvalidInput,
+            )),
+            InsuranceError::PolicyNotFound => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::MissingValue,
+            )),
+            InsuranceError::PolicyInactive => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::InvalidAction,
+            )),
+            InsuranceError::Unauthorized => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::InvalidAction,
+            )),
+            InsuranceError::BatchTooLarge => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::InvalidInput,
+            )),
+        }
+    }
+}
+
 #[contracttype]
 #[derive(Clone)]
 pub enum InsuranceEvent {
@@ -466,7 +497,11 @@ impl Insurance {
         Ok(())
     }
 
-    pub fn batch_pay_premiums(env: Env, caller: Address, policy_ids: Vec<u32>) -> Result<u32, InsuranceError> {
+    pub fn batch_pay_premiums(
+        env: Env,
+        caller: Address,
+        policy_ids: Vec<u32>,
+    ) -> Result<u32, InsuranceError> {
         caller.require_auth();
         Self::require_not_paused(&env, pause_functions::PAY_PREMIUM);
         if policy_ids.len() > MAX_BATCH_SIZE {

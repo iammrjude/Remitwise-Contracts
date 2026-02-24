@@ -148,6 +148,29 @@ pub enum ReportingError {
     AddressesNotConfigured = 4,
 }
 
+impl From<ReportingError> for soroban_sdk::Error {
+    fn from(err: ReportingError) -> Self {
+        match err {
+            ReportingError::AlreadyInitialized => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::InvalidAction,
+            )),
+            ReportingError::NotInitialized => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::MissingValue,
+            )),
+            ReportingError::Unauthorized => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::InvalidAction,
+            )),
+            ReportingError::AddressesNotConfigured => soroban_sdk::Error::from((
+                soroban_sdk::xdr::ScErrorType::Contract,
+                soroban_sdk::xdr::ScErrorCode::MissingValue,
+            )),
+        }
+    }
+}
+
 #[contracttype]
 #[derive(Clone)]
 pub enum ReportEvent {
