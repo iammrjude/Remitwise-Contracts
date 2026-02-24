@@ -65,7 +65,6 @@
       ]
     ],
     [],
-    [],
     []
   ],
   "ledger": {
@@ -696,7 +695,7 @@
           "v0": {
             "topics": [
               {
-                "symbol": "insure"
+                "symbol": "insuranc"
               },
               {
                 "vec": [
@@ -912,16 +911,21 @@
           "v0": {
             "topics": [
               {
-                "symbol": "fn_return"
-              },
-              {
-                "symbol": "pay_premium"
+                "symbol": "log"
               }
             ],
             "data": {
-              "error": {
-                "contract": 4
-              }
+              "vec": [
+                {
+                  "string": "caught panic 'Policy is not active' from contract function 'Symbol(obj#195)'"
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "u32": 1
+                }
+              ]
             }
           }
         }
@@ -941,12 +945,12 @@
               },
               {
                 "error": {
-                  "contract": 4
+                  "wasm_vm": "invalid_action"
                 }
               }
             ],
             "data": {
-              "string": "escalating Ok(ScErrorType::Contract) frame-exit to Err"
+              "string": "caught error from function"
             }
           }
         }
@@ -966,14 +970,14 @@
               },
               {
                 "error": {
-                  "contract": 4
+                  "wasm_vm": "invalid_action"
                 }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "contract try_call failed"
+                  "string": "contract call failed"
                 },
                 {
                   "symbol": "pay_premium"
@@ -1004,117 +1008,16 @@
           "v0": {
             "topics": [
               {
-                "symbol": "fn_call"
+                "symbol": "error"
               },
               {
-                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
-              },
-              {
-                "symbol": "get_policy"
-              }
-            ],
-            "data": {
-              "u32": 1
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "fn_return"
-              },
-              {
-                "symbol": "get_policy"
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "active"
-                  },
-                  "val": {
-                    "bool": false
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "coverage_amount"
-                  },
-                  "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 50000
-                    }
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "coverage_type"
-                  },
-                  "val": {
-                    "string": "health"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "id"
-                  },
-                  "val": {
-                    "u32": 1
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "monthly_premium"
-                  },
-                  "val": {
-                    "i128": {
-                      "hi": 0,
-                      "lo": 150
-                    }
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "name"
-                  },
-                  "val": {
-                    "string": "Health Plan"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "next_payment_date"
-                  },
-                  "val": {
-                    "u64": 2592000
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "owner"
-                  },
-                  "val": {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "schedule_id"
-                  },
-                  "val": "void"
+                "error": {
+                  "wasm_vm": "invalid_action"
                 }
-              ]
+              }
+            ],
+            "data": {
+              "string": "escalating error to panic"
             }
           }
         }

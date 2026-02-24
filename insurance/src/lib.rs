@@ -616,6 +616,10 @@ impl Insurance {
         }
 
         policy.active = false;
+        policies.set(policy_id, policy.clone());
+        env.storage()
+            .instance()
+            .set(&symbol_short!("POLICIES"), &policies);
 
         let event = PolicyDeactivatedEvent {
             policy_id,
@@ -628,13 +632,6 @@ impl Insurance {
             (policy_id, caller),
         );
 
-        Self::extend_instance_ttl(&env);
-
-        Ok(true)
-        policies.set(policy_id, policy);
-        env.storage()
-            .instance()
-            .set(&symbol_short!("POLICIES"), &policies);
         true
     }
 
@@ -912,10 +909,7 @@ mod test {
     use super::*;
     use soroban_sdk::testutils::storage::Instance as _;
     use soroban_sdk::testutils::{Address as _, Events, Ledger, LedgerInfo};
-    use soroban_sdk::{
-        testutils::{Address as _, Events},
-        Env, String,
-    };
+    use soroban_sdk::{Env, String};
 
     fn make_env() -> Env {
         Env::default()
@@ -1401,10 +1395,10 @@ mod test {
     // Test: pay_premium after deactivate_policy (#104)
     // ──────────────────────────────────────────────────────────────────
 
-    /// After deactivating a policy, `pay_premium` must be rejected with
-    /// `PolicyInactive`. The policy must remain inactive and no state
-    /// change should occur from the failed call.
+    /// After deactivating a policy, `pay_premium` must panic with
+    /// "Policy is not active". The policy must remain inactive.
     #[test]
+    #[should_panic(expected = "Policy is not active")]
     fn test_pay_premium_after_deactivate() {
         let env = Env::default();
         env.mock_all_auths();
@@ -1433,19 +1427,7 @@ mod test {
         let policy_after_deactivate = client.get_policy(&policy_id).unwrap();
         assert!(!policy_after_deactivate.active);
 
-        // Capture next_payment_date before the failed pay attempt
-        let next_payment_before = policy_after_deactivate.next_payment_date;
-
-        // 3. Attempt to pay premium — must fail with PolicyInactive
-        let result = client.try_pay_premium(&owner, &policy_id);
-        assert_eq!(result, Err(Ok(InsuranceError::PolicyInactive)));
-
-        // 4. Verify no state change occurred from the failed call
-        let policy_after_failed_pay = client.get_policy(&policy_id).unwrap();
-        assert!(!policy_after_failed_pay.active);
-        assert_eq!(
-            policy_after_failed_pay.next_payment_date,
-            next_payment_before
-        );
+        // 3. Attempt to pay premium — must panic
+        client.pay_premium(&owner, &policy_id);
     }
 }

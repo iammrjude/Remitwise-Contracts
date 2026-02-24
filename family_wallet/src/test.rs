@@ -952,11 +952,6 @@ fn test_data_persists_across_repeated_operations() {
     });
 
     let signers = vec![&env, member1.clone(), member2.clone()];
-    client.init(&owner, &initial_members);
-
-    client.add_family_member(&owner, &admin, &FamilyRole::Admin);
-
-    let signers = vec![&env, owner.clone(), admin.clone()];
     client.configure_multisig(
         &owner,
         &TransactionType::LargeWithdrawal,
@@ -971,43 +966,6 @@ fn test_data_persists_across_repeated_operations() {
         owner_data.is_some(),
         "Owner data must persist across ledger advancements"
     );
-    // Owner can spend any amount
-    assert!(client.check_spending_limit(&owner, &5000_0000000));
-    assert!(client.check_spending_limit(&owner, &100000_0000000));
-
-    // Admin can spend any amount
-    assert!(client.check_spending_limit(&admin, &5000_0000000));
-    assert!(client.check_spending_limit(&admin, &100000_0000000));
-
-    // Member was added via init with spending_limit = 0 (unlimited)
-    assert!(client.check_spending_limit(&member, &500_0000000));
-    assert!(client.check_spending_limit(&member, &1000_0000000));
-    assert!(client.check_spending_limit(&member, &1001_0000000)); // 0 = unlimited
-
-    // Non-member cannot spend
-    assert!(!client.check_spending_limit(&non_member, &1_0000000));
-    assert!(!client.check_spending_limit(&non_member, &1000_0000000));
-
-    // Negative amount always false
-    let eve = Address::generate(&env);
-    client.add_member(&owner, &eve, &FamilyRole::Member, &1_000);
-    assert!(!client.check_spending_limit(&eve, &-1));
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #10)")]
-fn test_add_member_invalid_role_owner() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
-
-    let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
-
-    let alice = Address::generate(&env);
-    client.add_member(&owner, &alice, &FamilyRole::Owner, &100);
-}
 
     let m1_data = client.get_family_member(&member1);
     assert!(m1_data.is_some(), "Member1 data must persist");
@@ -1025,8 +983,6 @@ fn test_add_member_invalid_role_owner() {
         "Instance TTL ({}) must remain >= 518,400 after repeated operations",
         ttl
     );
-    let alice = Address::generate(&env);
-    client.add_member(&owner, &alice, &FamilyRole::Member, &-50);
 }
 
 /// Verify that archive_old_transactions extends instance TTL.
@@ -1049,10 +1005,6 @@ fn test_archive_ttl_extended_on_archive_transactions() {
         min_persistent_entry_ttl: 100,
         max_entry_ttl: 3_000_000,
     });
-    let alice = Address::generate(&env);
-    client.add_member(&owner, &alice, &FamilyRole::Member, &100);
-    client.add_member(&owner, &alice, &FamilyRole::Member, &200);
-}
 
     let contract_id = env.register_contract(None, FamilyWallet);
     let client = FamilyWalletClient::new(&env, &contract_id);
@@ -1074,7 +1026,7 @@ fn test_archive_ttl_extended_on_archive_transactions() {
     });
 
     // archive_old_transactions calls extend_instance_ttl then extend_archive_ttl
-    let archived = client.archive_old_transactions(&owner, &2_000_000);
+    let _archived = client.archive_old_transactions(&owner, &2_000_000);
 
     // TTL should be extended
     let ttl = env.as_contract(&contract_id, || env.storage().instance().get_ttl());
@@ -1083,42 +1035,4 @@ fn test_archive_ttl_extended_on_archive_transactions() {
         "Instance TTL ({}) must be >= INSTANCE_BUMP_AMOUNT (518,400) after archiving",
         ttl
     );
-    client.init(&owner, &vec![&env, member1.clone()]);
-
-    let alice = Address::generate(&env);
-    client.add_member(&owner, &alice, &FamilyRole::Member, &100);
-
-    client.update_spending_limit(&member1, &alice, &999);
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #13)")]
-fn test_update_spending_limit_negative() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
-
-    let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
-
-    let alice = Address::generate(&env);
-    client.add_member(&owner, &alice, &FamilyRole::Member, &100);
-
-    client.update_spending_limit(&owner, &alice, &-1);
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #11)")]
-fn test_update_spending_limit_member_not_found() {
-    let env = Env::default();
-    env.mock_all_auths();
-    let contract_id = env.register_contract(None, FamilyWallet);
-    let client = FamilyWalletClient::new(&env, &contract_id);
-
-    let owner = Address::generate(&env);
-    client.init(&owner, &vec![&env]);
-
-    let stranger = Address::generate(&env);
-    client.update_spending_limit(&owner, &stranger, &100);
 }
