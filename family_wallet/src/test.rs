@@ -21,11 +21,9 @@ fn test_init_family_wallet() {
     let result = client.init(&owner, &initial_members);
     assert!(result);
 
-    // Verify owner
     let stored_owner = client.get_owner();
     assert_eq!(stored_owner, owner);
 
-    // Verify members
     let member1_data = client.get_family_member(&member1);
     assert!(member1_data.is_some());
     assert_eq!(member1_data.unwrap().role, FamilyRole::Member);
@@ -54,7 +52,6 @@ fn test_configure_multisig() {
 
     client.init(&owner, &initial_members);
 
-    // Configure 2-of-3 multi-sig for large withdrawals
     let signers = vec![&env, member1.clone(), member2.clone(), member3.clone()];
     let result = client.configure_multisig(
         &owner,
@@ -65,7 +62,6 @@ fn test_configure_multisig() {
     );
     assert!(result);
 
-    // Verify configuration
     let config = client.get_multisig_config(&TransactionType::LargeWithdrawal);
     assert!(config.is_some());
     let config = config.unwrap();
@@ -89,7 +85,6 @@ fn test_configure_multisig_unauthorized() {
 
     client.init(&owner, &initial_members);
 
-    // Try to configure as regular member (should fail)
     let signers = vec![&env, member1.clone(), member2.clone()];
     client.configure_multisig(
         &member1,
@@ -114,16 +109,13 @@ fn test_withdraw_below_threshold_no_multisig() {
 
     client.init(&owner, &initial_members);
 
-    // Setup token
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_client = TokenClient::new(&env, &token_contract.address());
 
-    // Mint tokens to owner
     let amount = 5000_0000000;
     StellarAssetClient::new(&env, &token_contract.address()).mint(&owner, &amount);
 
-    // Configure multi-sig with spending limit of 1000
     let signers = vec![&env, owner.clone(), member1.clone(), member2.clone()];
     client.configure_multisig(
         &owner,
@@ -133,7 +125,6 @@ fn test_withdraw_below_threshold_no_multisig() {
         &1000_0000000,
     );
 
-    // Withdraw amount below threshold (should execute immediately)
     let recipient = Address::generate(&env);
     let withdraw_amount = 500_0000000;
     let tx_id = client.withdraw(
@@ -143,10 +134,7 @@ fn test_withdraw_below_threshold_no_multisig() {
         &withdraw_amount,
     );
 
-    // Should return 0 for immediate execution
     assert_eq!(tx_id, 0);
-
-    // Verify tokens were transferred
     assert_eq!(token_client.balance(&recipient), withdraw_amount);
     assert_eq!(token_client.balance(&owner), amount - withdraw_amount);
 }
@@ -165,16 +153,13 @@ fn test_withdraw_above_threshold_requires_multisig() {
 
     client.init(&owner, &initial_members);
 
-    // Setup token
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_client = TokenClient::new(&env, &token_contract.address());
 
-    // Mint tokens to owner
     let amount = 5000_0000000;
     StellarAssetClient::new(&env, &token_contract.address()).mint(&owner, &amount);
 
-    // Configure 2-of-3 multi-sig with spending limit of 1000
     let signers = vec![&env, owner.clone(), member1.clone(), member2.clone()];
     client.configure_multisig(
         &owner,
@@ -184,7 +169,6 @@ fn test_withdraw_above_threshold_requires_multisig() {
         &1000_0000000,
     );
 
-    // Propose withdrawal above threshold
     let recipient = Address::generate(&env);
     let withdraw_amount = 2000_0000000;
     let tx_id = client.withdraw(
@@ -194,28 +178,22 @@ fn test_withdraw_above_threshold_requires_multisig() {
         &withdraw_amount,
     );
 
-    // Should return transaction ID (not 0)
     assert!(tx_id > 0);
 
-    // Verify transaction is pending
     let pending_tx = client.get_pending_transaction(&tx_id);
     assert!(pending_tx.is_some());
     let pending_tx = pending_tx.unwrap();
     assert_eq!(pending_tx.tx_type, TransactionType::LargeWithdrawal);
-    assert_eq!(pending_tx.signatures.len(), 1); // Owner auto-signed
+    assert_eq!(pending_tx.signatures.len(), 1);
 
-    // Verify tokens not yet transferred
     assert_eq!(token_client.balance(&recipient), 0);
     assert_eq!(token_client.balance(&owner), amount);
 
-    // Second signer signs (should execute)
     client.sign_transaction(&member1, &tx_id);
 
-    // Verify tokens were transferred
     assert_eq!(token_client.balance(&recipient), withdraw_amount);
     assert_eq!(token_client.balance(&owner), amount - withdraw_amount);
 
-    // Verify transaction is no longer pending
     let pending_tx = client.get_pending_transaction(&tx_id);
     assert!(pending_tx.is_none());
 }
@@ -235,16 +213,13 @@ fn test_multisig_threshold_validation() {
 
     client.init(&owner, &initial_members);
 
-    // Setup token
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_client = TokenClient::new(&env, &token_contract.address());
 
-    // Mint tokens to owner
     let amount = 5000_0000000;
     StellarAssetClient::new(&env, &token_contract.address()).mint(&owner, &amount);
 
-    // Configure 3-of-3 multi-sig
     let signers = vec![&env, owner.clone(), member1.clone(), member2.clone()];
     client.configure_multisig(
         &owner,
@@ -254,7 +229,6 @@ fn test_multisig_threshold_validation() {
         &1000_0000000,
     );
 
-    // Propose withdrawal
     let recipient = Address::generate(&env);
     let withdraw_amount = 2000_0000000;
     let tx_id = client.withdraw(
@@ -264,18 +238,14 @@ fn test_multisig_threshold_validation() {
         &withdraw_amount,
     );
 
-    // Owner already signed, need 2 more
     client.sign_transaction(&member1, &tx_id);
 
-    // Verify still pending (only 2 signatures, need 3)
     let pending_tx = client.get_pending_transaction(&tx_id);
     assert!(pending_tx.is_some());
     assert_eq!(token_client.balance(&recipient), 0);
 
-    // Third signature should execute
     client.sign_transaction(&member2, &tx_id);
 
-    // Verify executed
     assert_eq!(token_client.balance(&recipient), withdraw_amount);
     let pending_tx = client.get_pending_transaction(&tx_id);
     assert!(pending_tx.is_none());
@@ -296,28 +266,23 @@ fn test_duplicate_signature_prevention() {
 
     client.init(&owner, &initial_members);
 
-    // Setup token
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
 
-    // Mint tokens
     StellarAssetClient::new(&env, &token_contract.address()).mint(&owner, &5000_0000000);
 
-    // Configure multi-sig with threshold of 3 (so transaction stays pending after first signature)
     let signers = vec![&env, owner.clone(), member1.clone(), member2.clone()];
     client.configure_multisig(
         &owner,
         &TransactionType::LargeWithdrawal,
-        &3, // Need 3 signatures, so after first signature it's still pending
+        &3,
         &signers,
         &1000_0000000,
     );
 
-    // Propose withdrawal
     let recipient = Address::generate(&env);
     let tx_id = client.withdraw(&owner, &token_contract.address(), &recipient, &2000_0000000);
 
-    // Try to sign twice (should fail with "Already signed")
     client.sign_transaction(&member1, &tx_id);
     client.sign_transaction(&member1, &tx_id);
 }
@@ -336,7 +301,6 @@ fn test_propose_split_config_change() {
 
     client.init(&owner, &initial_members);
 
-    // Configure multi-sig for split changes
     let signers = vec![&env, owner.clone(), member1.clone(), member2.clone()];
     client.configure_multisig(
         &owner,
@@ -346,12 +310,10 @@ fn test_propose_split_config_change() {
         &0,
     );
 
-    // Propose split config change
     let tx_id = client.propose_split_config_change(&owner, &40, &30, &20, &10);
 
     assert!(tx_id > 0);
 
-    // Verify pending
     let pending_tx = client.get_pending_transaction(&tx_id);
     assert!(pending_tx.is_some());
     assert_eq!(
@@ -359,10 +321,8 @@ fn test_propose_split_config_change() {
         TransactionType::SplitConfigChange
     );
 
-    // Second signature should execute
     client.sign_transaction(&member1, &tx_id);
 
-    // Verify executed
     let pending_tx = client.get_pending_transaction(&tx_id);
     assert!(pending_tx.is_none());
 }
@@ -381,19 +341,15 @@ fn test_propose_role_change() {
 
     client.init(&owner, &initial_members);
 
-    // Configure multi-sig for role changes
     let signers = vec![&env, owner.clone(), member1.clone()];
     client.configure_multisig(&owner, &TransactionType::RoleChange, &2, &signers, &0);
 
-    // Propose role change
     let tx_id = client.propose_role_change(&owner, &member2, &FamilyRole::Admin);
 
     assert!(tx_id > 0);
 
-    // Second signature should execute
     client.sign_transaction(&member1, &tx_id);
 
-    // Verify role changed
     let member2_data = client.get_family_member(&member2);
     assert!(member2_data.is_some());
     assert_eq!(member2_data.unwrap().role, FamilyRole::Admin);
@@ -413,15 +369,12 @@ fn test_propose_emergency_transfer() {
 
     client.init(&owner, &initial_members);
 
-    // Setup token
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_client = TokenClient::new(&env, &token_contract.address());
 
-    // Mint tokens
     StellarAssetClient::new(&env, &token_contract.address()).mint(&owner, &5000_0000000);
 
-    // Configure multi-sig for emergency transfers
     let signers = vec![&env, owner.clone(), member1.clone(), member2.clone()];
     client.configure_multisig(
         &owner,
@@ -431,7 +384,6 @@ fn test_propose_emergency_transfer() {
         &0,
     );
 
-    // Propose emergency transfer
     let recipient = Address::generate(&env);
     let transfer_amount = 3000_0000000;
     let tx_id = client.propose_emergency_transfer(
@@ -443,10 +395,8 @@ fn test_propose_emergency_transfer() {
 
     assert!(tx_id > 0);
 
-    // Second signature should execute
     client.sign_transaction(&member1, &tx_id);
 
-    // Verify transfer executed
     assert_eq!(token_client.balance(&recipient), transfer_amount);
     assert_eq!(token_client.balance(&owner), 5000_0000000 - transfer_amount);
 }
@@ -465,34 +415,26 @@ fn test_emergency_mode_direct_transfer_within_limits() {
 
     client.init(&owner, &initial_members);
 
-    // Setup token
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_client = TokenClient::new(&env, &token_contract.address());
 
-    // Mint tokens
     let total = 5000_0000000;
     StellarAssetClient::new(&env, &token_contract.address()).mint(&owner, &total);
 
-    // Configure emergency settings
     client.configure_emergency(&owner, &2000_0000000, &3600u64, &1000_0000000);
-
-    // Enable emergency mode
     client.set_emergency_mode(&owner, &true);
     assert!(client.is_emergency_mode());
 
-    // One-click emergency transfer within limits
     let recipient = Address::generate(&env);
     let amount = 1500_0000000;
     let tx_id =
         client.propose_emergency_transfer(&owner, &token_contract.address(), &recipient, &amount);
 
-    // Should execute immediately (no pending transaction id)
     assert_eq!(tx_id, 0);
     assert_eq!(token_client.balance(&recipient), amount);
     assert_eq!(token_client.balance(&owner), total - amount);
 
-    // Last emergency timestamp should be set
     let last_ts = client.get_last_emergency_at();
     assert!(last_ts.is_some());
 }
@@ -510,19 +452,15 @@ fn test_emergency_transfer_exceeds_limit() {
 
     client.init(&owner, &initial_members);
 
-    // Setup token
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
 
-    // Mint tokens
     StellarAssetClient::new(&env, &token_contract.address()).mint(&owner, &5000_0000000);
 
-    // Configure emergency settings with small max_amount
     client.configure_emergency(&owner, &1000_0000000, &3600u64, &0);
     client.set_emergency_mode(&owner, &true);
 
     let recipient = Address::generate(&env);
-    // This should exceed max_amount and panic
     client.propose_emergency_transfer(&owner, &token_contract.address(), &recipient, &2000_0000000);
 }
 
@@ -539,26 +477,21 @@ fn test_emergency_transfer_cooldown_enforced() {
 
     client.init(&owner, &initial_members);
 
-    // Setup token
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
 
-    // Mint tokens
     StellarAssetClient::new(&env, &token_contract.address()).mint(&owner, &5000_0000000);
 
-    // Configure emergency settings with non-zero cooldown
     client.configure_emergency(&owner, &2000_0000000, &3600u64, &0);
     client.set_emergency_mode(&owner, &true);
 
     let recipient = Address::generate(&env);
     let amount = 1000_0000000;
 
-    // First emergency transfer should succeed
     let tx_id =
         client.propose_emergency_transfer(&owner, &token_contract.address(), &recipient, &amount);
     assert_eq!(tx_id, 0);
 
-    // Second immediate emergency transfer should fail due to cooldown
     client.propose_emergency_transfer(&owner, &token_contract.address(), &recipient, &amount);
 }
 
@@ -575,15 +508,12 @@ fn test_emergency_transfer_min_balance_enforced() {
 
     client.init(&owner, &initial_members);
 
-    // Setup token
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
 
-    // Mint tokens
     let total = 3000_0000000;
     StellarAssetClient::new(&env, &token_contract.address()).mint(&owner, &total);
 
-    // Require at least 2500 remaining, attempt to send 1000 (would leave 2000)
     client.configure_emergency(&owner, &2000_0000000, &0u64, &2500_0000000);
     client.set_emergency_mode(&owner, &true);
 
@@ -604,21 +534,17 @@ fn test_add_and_remove_family_member() {
 
     client.init(&owner, &initial_members);
 
-    // Add new member as Admin
     let new_member = Address::generate(&env);
     let result = client.add_family_member(&owner, &new_member, &FamilyRole::Admin);
     assert!(result);
 
-    // Verify member added
     let member_data = client.get_family_member(&new_member);
     assert!(member_data.is_some());
     assert_eq!(member_data.unwrap().role, FamilyRole::Admin);
 
-    // Remove member
     let result = client.remove_family_member(&owner, &new_member);
     assert!(result);
 
-    // Verify member removed
     let member_data = client.get_family_member(&new_member);
     assert!(member_data.is_none());
 }
@@ -637,7 +563,6 @@ fn test_add_member_unauthorized() {
 
     client.init(&owner, &initial_members);
 
-    // Try to add member as regular member (should fail)
     let new_member = Address::generate(&env);
     client.add_family_member(&member1, &new_member, &FamilyRole::Member);
 }
@@ -665,32 +590,24 @@ fn test_different_thresholds_for_different_transaction_types() {
         member3.clone(),
     ];
 
-    // Configure different thresholds for different transaction types
     client.configure_multisig(
         &owner,
         &TransactionType::LargeWithdrawal,
-        &2, // 2-of-5
+        &2,
         &all_signers,
         &1000_0000000,
     );
 
-    client.configure_multisig(
-        &owner,
-        &TransactionType::RoleChange,
-        &3, // 3-of-5 (more secure)
-        &all_signers,
-        &0,
-    );
+    client.configure_multisig(&owner, &TransactionType::RoleChange, &3, &all_signers, &0);
 
     client.configure_multisig(
         &owner,
         &TransactionType::EmergencyTransfer,
-        &4, // 4-of-5 (most secure)
+        &4,
         &all_signers,
         &0,
     );
 
-    // Verify configurations
     let withdraw_config = client.get_multisig_config(&TransactionType::LargeWithdrawal);
     assert_eq!(withdraw_config.unwrap().threshold, 2);
 
@@ -717,12 +634,10 @@ fn test_unauthorized_signer() {
 
     client.init(&owner, &initial_members);
 
-    // Setup token
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
     StellarAssetClient::new(&env, &token_contract.address()).mint(&owner, &5000_0000000);
 
-    // Configure multi-sig with only owner and member1 as signers
     let signers = vec![&env, owner.clone(), member1.clone()];
     client.configure_multisig(
         &owner,
@@ -732,11 +647,9 @@ fn test_unauthorized_signer() {
         &1000_0000000,
     );
 
-    // Propose withdrawal
     let recipient = Address::generate(&env);
     let tx_id = client.withdraw(&owner, &token_contract.address(), &recipient, &2000_0000000);
 
-    // Try to sign with member2 (not authorized) - should fail
     client.sign_transaction(&member2, &tx_id);
 }
 
@@ -757,11 +670,9 @@ fn test_archive_old_transactions() {
 
     client.init(&owner, &initial_members);
 
-    // Archive (even with no transactions, should work)
     let archived_count = client.archive_old_transactions(&owner, &1_000_000);
     assert_eq!(archived_count, 0);
 
-    // Check archived transactions
     let archived = client.get_archived_transactions(&10);
     assert_eq!(archived.len(), 0);
 }
@@ -780,12 +691,10 @@ fn test_cleanup_expired_pending() {
 
     client.init(&owner, &initial_members);
 
-    // Setup token
     let token_admin = Address::generate(&env);
     let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
     StellarAssetClient::new(&env, &token_contract.address()).mint(&owner, &5000_0000000);
 
-    // Configure multi-sig
     let signers = vec![&env, owner.clone(), member1.clone(), member2.clone()];
     client.configure_multisig(
         &owner,
@@ -795,25 +704,20 @@ fn test_cleanup_expired_pending() {
         &1000_0000000,
     );
 
-    // Propose a withdrawal (creates pending transaction)
     let recipient = Address::generate(&env);
     let tx_id = client.withdraw(&owner, &token_contract.address(), &recipient, &2000_0000000);
     assert!(tx_id > 0);
 
-    // Verify pending transaction exists
     let pending = client.get_pending_transaction(&tx_id);
     assert!(pending.is_some());
 
-    // Advance time past expiration (24 hours = 86400 seconds)
     let mut ledger = env.ledger().get();
     ledger.timestamp += 86401;
     env.ledger().set(ledger);
 
-    // Cleanup expired
     let removed = client.cleanup_expired_pending(&owner);
     assert_eq!(removed, 1);
 
-    // Verify pending transaction is gone
     let pending_after = client.get_pending_transaction(&tx_id);
     assert!(pending_after.is_none());
 }
@@ -832,11 +736,10 @@ fn test_storage_stats() {
 
     client.init(&owner, &initial_members);
 
-    // Update stats by calling archive
     client.archive_old_transactions(&owner, &1_000_000);
 
     let stats = client.get_storage_stats();
-    assert_eq!(stats.total_members, 3); // owner + 2 members
+    assert_eq!(stats.total_members, 3);
     assert_eq!(stats.pending_transactions, 0);
     assert_eq!(stats.archived_transactions, 0);
 }
@@ -855,7 +758,6 @@ fn test_archive_unauthorized() {
 
     client.init(&owner, &initial_members);
 
-    // Member (not owner/admin) tries to archive
     client.archive_old_transactions(&member1, &1_000_000);
 }
 
@@ -873,7 +775,6 @@ fn test_cleanup_unauthorized() {
 
     client.init(&owner, &initial_members);
 
-    // Member (not owner/admin) tries to cleanup
     client.cleanup_expired_pending(&member1);
 }
 
@@ -1051,6 +952,11 @@ fn test_data_persists_across_repeated_operations() {
     });
 
     let signers = vec![&env, member1.clone(), member2.clone()];
+    client.init(&owner, &initial_members);
+
+    client.add_family_member(&owner, &admin, &FamilyRole::Admin);
+
+    let signers = vec![&env, owner.clone(), admin.clone()];
     client.configure_multisig(
         &owner,
         &TransactionType::LargeWithdrawal,
@@ -1065,6 +971,43 @@ fn test_data_persists_across_repeated_operations() {
         owner_data.is_some(),
         "Owner data must persist across ledger advancements"
     );
+    // Owner can spend any amount
+    assert!(client.check_spending_limit(&owner, &5000_0000000));
+    assert!(client.check_spending_limit(&owner, &100000_0000000));
+
+    // Admin can spend any amount
+    assert!(client.check_spending_limit(&admin, &5000_0000000));
+    assert!(client.check_spending_limit(&admin, &100000_0000000));
+
+    // Member was added via init with spending_limit = 0 (unlimited)
+    assert!(client.check_spending_limit(&member, &500_0000000));
+    assert!(client.check_spending_limit(&member, &1000_0000000));
+    assert!(client.check_spending_limit(&member, &1001_0000000)); // 0 = unlimited
+
+    // Non-member cannot spend
+    assert!(!client.check_spending_limit(&non_member, &1_0000000));
+    assert!(!client.check_spending_limit(&non_member, &1000_0000000));
+
+    // Negative amount always false
+    let eve = Address::generate(&env);
+    client.add_member(&owner, &eve, &FamilyRole::Member, &1_000);
+    assert!(!client.check_spending_limit(&eve, &-1));
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #10)")]
+fn test_add_member_invalid_role_owner() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, FamilyWallet);
+    let client = FamilyWalletClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    client.init(&owner, &vec![&env]);
+
+    let alice = Address::generate(&env);
+    client.add_member(&owner, &alice, &FamilyRole::Owner, &100);
+}
 
     let m1_data = client.get_family_member(&member1);
     assert!(m1_data.is_some(), "Member1 data must persist");
@@ -1082,6 +1025,8 @@ fn test_data_persists_across_repeated_operations() {
         "Instance TTL ({}) must remain >= 518,400 after repeated operations",
         ttl
     );
+    let alice = Address::generate(&env);
+    client.add_member(&owner, &alice, &FamilyRole::Member, &-50);
 }
 
 /// Verify that archive_old_transactions extends instance TTL.
@@ -1104,6 +1049,10 @@ fn test_archive_ttl_extended_on_archive_transactions() {
         min_persistent_entry_ttl: 100,
         max_entry_ttl: 3_000_000,
     });
+    let alice = Address::generate(&env);
+    client.add_member(&owner, &alice, &FamilyRole::Member, &100);
+    client.add_member(&owner, &alice, &FamilyRole::Member, &200);
+}
 
     let contract_id = env.register_contract(None, FamilyWallet);
     let client = FamilyWalletClient::new(&env, &contract_id);
@@ -1134,4 +1083,42 @@ fn test_archive_ttl_extended_on_archive_transactions() {
         "Instance TTL ({}) must be >= INSTANCE_BUMP_AMOUNT (518,400) after archiving",
         ttl
     );
+    client.init(&owner, &vec![&env, member1.clone()]);
+
+    let alice = Address::generate(&env);
+    client.add_member(&owner, &alice, &FamilyRole::Member, &100);
+
+    client.update_spending_limit(&member1, &alice, &999);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #13)")]
+fn test_update_spending_limit_negative() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, FamilyWallet);
+    let client = FamilyWalletClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    client.init(&owner, &vec![&env]);
+
+    let alice = Address::generate(&env);
+    client.add_member(&owner, &alice, &FamilyRole::Member, &100);
+
+    client.update_spending_limit(&owner, &alice, &-1);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #11)")]
+fn test_update_spending_limit_member_not_found() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, FamilyWallet);
+    let client = FamilyWalletClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    client.init(&owner, &vec![&env]);
+
+    let stranger = Address::generate(&env);
+    client.update_spending_limit(&owner, &stranger, &100);
 }
