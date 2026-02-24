@@ -1,4 +1,5 @@
 #![no_std]
+
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token::TokenClient, vec,
     Address, Env, Map, Symbol, Vec,
@@ -889,4 +890,92 @@ impl RemittanceSplit {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    use soroban_sdk::testutils::{Address as _, Events};
+
+    #[test]
+    fn test_initialize_split_emits_event() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, RemittanceSplit);
+        let client = RemittanceSplitClient::new(&env, &contract_id);
+        let owner = Address::generate(&env);
+
+        // Initialize split
+        let result = client.initialize_split(&owner, &0, &50, &30, &15, &5);
+        assert!(result);
+
+        // Verify event was emitted
+        let events = env.events().all();
+        assert_eq!(events.len(), 1);
+    }
+
+    #[test]
+    fn test_calculate_split_emits_event() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, RemittanceSplit);
+        let client = RemittanceSplitClient::new(&env, &contract_id);
+        let owner = Address::generate(&env);
+
+        // Initialize split first
+        client.initialize_split(&owner, &0, &40, &30, &20, &10);
+
+        // Get events before calculating
+        let events_before = env.events().all().len();
+
+        // Calculate split
+        let result = client.calculate_split(&1000);
+        assert_eq!(result.len(), 4);
+        assert_eq!(result.get(0).unwrap(), 400); // 40% of 1000
+        assert_eq!(result.get(1).unwrap(), 300); // 30% of 1000
+        assert_eq!(result.get(2).unwrap(), 200); // 20% of 1000
+        assert_eq!(result.get(3).unwrap(), 100); // 10% of 1000
+
+        // Verify 2 new events were emitted (SplitCalculated + audit event)
+        let events_after = env.events().all().len();
+        assert_eq!(events_after - events_before, 2);
+    }
+
+    #[test]
+    fn test_multiple_operations_emit_multiple_events() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, RemittanceSplit);
+        let client = RemittanceSplitClient::new(&env, &contract_id);
+        let owner = Address::generate(&env);
+
+        // Initialize split
+        client.initialize_split(&owner, &0, &50, &25, &15, &10);
+
+        // Calculate split twice
+        client.calculate_split(&2000);
+        client.calculate_split(&3000);
+
+        // Should have 5 events total (1 init + 2*2 calc)
+        let events = env.events().all();
+        assert_eq!(events.len(), 5);
+    }
+
+    #[test]
+    fn test_uninitialized_defaults() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, RemittanceSplit);
+        let client = RemittanceSplitClient::new(&env, &contract_id);
+
+        // 1. Verify get_split returns the hardcoded default: [50, 30, 15, 5]
+        let default_split = client.get_split();
+        assert_eq!(default_split.len(), 4);
+        assert_eq!(default_split.get(0).unwrap(), 50);
+        assert_eq!(default_split.get(1).unwrap(), 30);
+        assert_eq!(default_split.get(2).unwrap(), 15);
+        assert_eq!(default_split.get(3).unwrap(), 5);
+
+        // 2. Verify get_config returns None (Option::None)
+        let config = client.get_config();
+        assert!(config.is_none());
+    }
+}
 mod test;
