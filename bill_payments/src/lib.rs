@@ -1833,8 +1833,8 @@ mod test {
             &bill_name,
             &amount,
             &original_due_date,
-            &true,       // recurring
-            &frequency,  // frequency_days
+            &true,      // recurring
+            &frequency, // frequency_days
         );
 
         // Pay the recurring bill – this should create the next occurrence.
@@ -1867,13 +1867,9 @@ mod test {
             next_bill.owner, owner,
             "Cloned bill must preserve the original owner"
         );
+        assert_eq!(next_bill.paid, false, "Cloned bill must start as unpaid");
         assert_eq!(
-            next_bill.paid, false,
-            "Cloned bill must start as unpaid"
-        );
-        assert_eq!(
-            next_bill.paid_at,
-            None,
+            next_bill.paid_at, None,
             "Cloned bill must have paid_at = None"
         );
 
