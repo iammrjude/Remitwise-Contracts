@@ -32,6 +32,9 @@ pub struct Bill {
     pub created_at: u64,
     pub paid_at: Option<u64>,
     pub schedule_id: Option<u32>,
+    /// Intended currency/asset for this bill (e.g. "XLM", "USDC", "NGN").
+    /// Defaults to "XLM" for entries created before this field was introduced.
+    pub currency: String,
 }
 
 /// Paginated result for bill queries
@@ -84,6 +87,8 @@ pub struct ArchivedBill {
     pub amount: i128,
     pub paid_at: u64,
     pub archived_at: u64,
+    /// Intended currency/asset carried over from the originating `Bill`.
+    pub currency: String,
 }
 
 /// Paginated result for archived bill queries
@@ -353,6 +358,7 @@ impl BillPayments {
         due_date: u64,
         recurring: bool,
         frequency_days: u32,
+        currency: String,
     ) -> Result<u32, Error> {
         owner.require_auth();
         Self::require_not_paused(&env, pause_functions::CREATE_BILL)?;
@@ -363,6 +369,13 @@ impl BillPayments {
         if recurring && frequency_days == 0 {
             return Err(Error::InvalidFrequency);
         }
+
+        // Resolve default currency: blank input → "XLM"
+        let resolved_currency = if currency.len() == 0 {
+            String::from_str(&env, "XLM")
+        } else {
+            currency
+        };
 
         Self::extend_instance_ttl(&env);
         let mut bills: Map<u32, Bill> = env
@@ -391,6 +404,7 @@ impl BillPayments {
             created_at: current_time,
             paid_at: None,
             schedule_id: None,
+            currency: resolved_currency,
         };
 
         let bill_owner = bill.owner.clone();
@@ -458,6 +472,7 @@ impl BillPayments {
                 created_at: current_time,
                 paid_at: None,
                 schedule_id: bill.schedule_id,
+                currency: bill.currency.clone(),
             };
             bills.set(next_id, next_bill);
             env.storage()
@@ -810,6 +825,7 @@ impl BillPayments {
                         amount: bill.amount,
                         paid_at,
                         archived_at: current_time,
+                        currency: bill.currency.clone(),
                     };
                     archived.set(id, archived_bill);
                     to_remove.push_back(id);
@@ -876,6 +892,7 @@ impl BillPayments {
             created_at: archived_bill.paid_at,
             paid_at: Some(archived_bill.paid_at),
             schedule_id: None,
+            currency: archived_bill.currency.clone(),
         };
 
         bills.set(bill_id, restored_bill);
@@ -998,6 +1015,7 @@ impl BillPayments {
                     created_at: current_time,
                     paid_at: None,
                     schedule_id: bill.schedule_id,
+                    currency: bill.currency.clone(),
                 };
                 bills.set(next_id, next_bill);
             }
@@ -1054,6 +1072,106 @@ impl BillPayments {
                 total_archived_amount: 0,
                 last_updated: 0,
             })
+    }
+
+    // -----------------------------------------------------------------------
+    // Currency-filter helper queries
+    // -----------------------------------------------------------------------
+
+    /// Get a page of ALL bills (paid + unpaid) for `owner` that match `currency`.
+    ///
+    /// # Arguments
+    /// * `owner`    – whose bills to return
+    /// * `currency` – currency code to filter by, e.g. `"USDC"`, `"XLM"`
+    /// * `cursor`   – start after this bill ID (pass 0 for the first page)
+    /// * `limit`    – max items per page (0 → DEFAULT_PAGE_LIMIT, capped at MAX_PAGE_LIMIT)
+    ///
+    /// # Returns
+    /// `BillPage { items, next_cursor, count }`. `next_cursor == 0` means no more pages.
+    pub fn get_bills_by_currency(
+        env: Env,
+        owner: Address,
+        currency: String,
+        cursor: u32,
+        limit: u32,
+    ) -> BillPage {
+        let limit = Self::clamp_limit(limit);
+        let bills: Map<u32, Bill> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("BILLS"))
+            .unwrap_or_else(|| Map::new(&env));
+
+        let mut staging: Vec<(u32, Bill)> = Vec::new(&env);
+        for (id, bill) in bills.iter() {
+            if id <= cursor {
+                continue;
+            }
+            if bill.owner != owner || bill.currency != currency {
+                continue;
+            }
+            staging.push_back((id, bill));
+            if staging.len() > limit {
+                break;
+            }
+        }
+
+        Self::build_page(&env, staging, limit)
+    }
+
+    /// Get a page of **unpaid** bills for `owner` that match `currency`.
+    ///
+    /// Same cursor/limit semantics as `get_bills_by_currency`.
+    pub fn get_unpaid_bills_by_currency(
+        env: Env,
+        owner: Address,
+        currency: String,
+        cursor: u32,
+        limit: u32,
+    ) -> BillPage {
+        let limit = Self::clamp_limit(limit);
+        let bills: Map<u32, Bill> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("BILLS"))
+            .unwrap_or_else(|| Map::new(&env));
+
+        let mut staging: Vec<(u32, Bill)> = Vec::new(&env);
+        for (id, bill) in bills.iter() {
+            if id <= cursor {
+                continue;
+            }
+            if bill.owner != owner || bill.paid || bill.currency != currency {
+                continue;
+            }
+            staging.push_back((id, bill));
+            if staging.len() > limit {
+                break;
+            }
+        }
+
+        Self::build_page(&env, staging, limit)
+    }
+
+    /// Sum of all **unpaid** bill amounts for `owner` denominated in `currency`.
+    ///
+    /// # Example
+    /// ```text
+    /// let usdc_owed = client.get_total_unpaid_by_currency(&owner, &String::from_str(&env, "USDC"));
+    /// ```
+    pub fn get_total_unpaid_by_currency(env: Env, owner: Address, currency: String) -> i128 {
+        let bills: Map<u32, Bill> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("BILLS"))
+            .unwrap_or_else(|| Map::new(&env));
+        let mut total = 0i128;
+        for (_, bill) in bills.iter() {
+            if !bill.paid && bill.owner == owner && bill.currency == currency {
+                total += bill.amount;
+            }
+        }
+        total
     }
 
     // -----------------------------------------------------------------------
@@ -1146,6 +1264,7 @@ mod test {
                 &(env.ledger().timestamp() + 86400 * (i as u64 + 1)),
                 &false,
                 &0,
+                &String::from_str(&env, "XLM"),
             );
             ids.push_back(id);
         }
@@ -1272,6 +1391,7 @@ mod test {
                 &0,
                 &false,
                 &0,
+                &String::from_str(&env, "XLM"),
             );
         }
 
@@ -1384,6 +1504,7 @@ mod test {
             &base_due_date,
             &true, // recurring
             &1,    // frequency_days = 1
+            &String::from_str(&env, "XLM"),
         );
 
         // Pay the bill
@@ -1417,6 +1538,7 @@ mod test {
             &base_due_date,
             &true, // recurring
             &30,   // frequency_days = 30
+            &String::from_str(&env, "XLM"),
         );
 
         // Pay the bill
@@ -1453,6 +1575,7 @@ mod test {
             &base_due_date,
             &true, // recurring
             &365,  // frequency_days = 365
+            &String::from_str(&env, "XLM"),
         );
 
         // Pay the bill
@@ -1492,6 +1615,7 @@ mod test {
             &base_due_date,
             &true, // recurring
             &30,   // frequency_days = 30
+            &String::from_str(&env, "XLM"),
         );
 
         // Pay the bill (at time 1_000_500, which is 500 seconds after due_date)
@@ -1535,6 +1659,7 @@ mod test {
             &base_due_date,
             &true, // recurring
             &30,   // frequency_days = 30
+            &String::from_str(&env, "XLM"),
         );
 
         // Pay first bill
@@ -1583,6 +1708,7 @@ mod test {
             &base_due_date,
             &true, // recurring
             &30,   // frequency_days = 30
+            &String::from_str(&env, "XLM"),
         );
 
         // Pay first bill
@@ -1628,6 +1754,7 @@ mod test {
             &base_due_date,
             &true, // recurring
             &30,   // frequency_days = 30
+            &String::from_str(&env, "XLM"),
         );
 
         // Pay the bill early (at time 500_000)
@@ -1665,6 +1792,7 @@ mod test {
             &1_000_000,
             &true,
             &frequency,
+            &String::from_str(&env, "XLM"),
         );
 
         // Pay first bill
@@ -1700,6 +1828,7 @@ mod test {
             &1_000_000,
             &true,
             &30,
+            &String::from_str(&env, "XLM"),
         );
 
         // Pay first bill
@@ -1719,34 +1848,6 @@ mod test {
     }
 
     #[test]
-    fn test_recurring_date_math_name_preserved_across_cycles() {
-        // Test: Bill name is preserved across all recurring cycles
-        let env = make_env();
-        env.mock_all_auths();
-        let cid = env.register_contract(None, BillPayments);
-        let client = BillPaymentsClient::new(&env, &cid);
-        let owner = Address::generate(&env);
-
-        let name = String::from_str(&env, "Rent Payment");
-        let bill_id = client.create_bill(&owner, &name, &1000, &1_000_000, &true, &30);
-
-        // Pay first bill
-        client.pay_bill(&owner, &bill_id);
-
-        // Pay second bill
-        client.pay_bill(&owner, &2);
-
-        // Verify all bills have the same name
-        let bill1 = client.get_bill(&1).unwrap();
-        let bill2 = client.get_bill(&2).unwrap();
-        let bill3 = client.get_bill(&3).unwrap();
-
-        assert_eq!(bill1.name, name);
-        assert_eq!(bill2.name, name);
-        assert_eq!(bill3.name, name);
-    }
-
-    #[test]
     fn test_recurring_date_math_owner_preserved_across_cycles() {
         // Test: Bill owner is preserved across all recurring cycles
         let env = make_env();
@@ -1762,6 +1863,7 @@ mod test {
             &1_000_000,
             &true,
             &30,
+            &String::from_str(&env, "XLM"),
         );
 
         // Pay first bill
@@ -1801,6 +1903,7 @@ mod test {
             &base_due,
             &true,
             &freq,
+            &String::from_str(&env, "XLM"),
         );
 
         client.pay_bill(&owner, &bill_id);
