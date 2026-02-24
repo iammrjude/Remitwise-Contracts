@@ -3,10 +3,10 @@
 use soroban_sdk::{testutils::Address as _, Address, Env, String as SorobanString};
 
 // Import all contract types and clients
-use remittance_split::{RemittanceSplit, RemittanceSplitClient};
-use savings_goals::{SavingsGoalContract, SavingsGoalContractClient};
 use bill_payments::{BillPayments, BillPaymentsClient};
 use insurance::{Insurance, InsuranceClient};
+use remittance_split::{RemittanceSplit, RemittanceSplitClient};
+use savings_goals::{SavingsGoalContract, SavingsGoalContractClient};
 
 /// Integration test that simulates a complete user flow:
 /// 1. Deploy all contracts (remittance_split, savings_goals, bill_payments, insurance)
@@ -39,9 +39,7 @@ fn test_multi_contract_user_flow() {
     // Spending: 40%, Savings: 30%, Bills: 20%, Insurance: 10%
     let nonce = 0u64;
     remittance_client.initialize_split(
-        &user,
-        &nonce,
-        &40u32, // spending
+        &user, &nonce, &40u32, // spending
         &30u32, // savings
         &20u32, // bills
         &10u32, // insurance
@@ -52,12 +50,7 @@ fn test_multi_contract_user_flow() {
     let target_amount = 10_000i128;
     let target_date = env.ledger().timestamp() + (365 * 86400); // 1 year from now
 
-    let goal_id = savings_client.create_goal(
-        &user,
-        &goal_name,
-        &target_amount,
-        &target_date,
-    );
+    let goal_id = savings_client.create_goal(&user, &goal_name, &target_amount, &target_date);
     assert_eq!(goal_id, 1u32, "Goal ID should be 1");
 
     // Step 3: Create a bill
@@ -105,7 +98,10 @@ fn test_multi_contract_user_flow() {
 
     // Step 6: Verify amounts match expected percentages
     // Spending: 40% of 10,000 = 4,000
-    assert_eq!(spending_amount, 4_000i128, "Spending amount should be 4,000");
+    assert_eq!(
+        spending_amount, 4_000i128,
+        "Spending amount should be 4,000"
+    );
 
     // Savings: 30% of 10,000 = 3,000
     assert_eq!(savings_amount, 3_000i128, "Savings amount should be 3,000");
@@ -114,7 +110,10 @@ fn test_multi_contract_user_flow() {
     assert_eq!(bills_amount, 2_000i128, "Bills amount should be 2,000");
 
     // Insurance: 10% of 10,000 = 1,000 (gets remainder to handle rounding)
-    assert_eq!(insurance_amount, 1_000i128, "Insurance amount should be 1,000");
+    assert_eq!(
+        insurance_amount, 1_000i128,
+        "Insurance amount should be 1,000"
+    );
 
     // Step 7: Verify total sum equals original amount
     let total_allocated = spending_amount + savings_amount + bills_amount + insurance_amount;
@@ -145,14 +144,7 @@ fn test_split_with_rounding() {
 
     // Initialize with percentages that might cause rounding issues
     // Spending: 33%, Savings: 33%, Bills: 17%, Insurance: 17%
-    remittance_client.initialize_split(
-        &user,
-        &0u64,
-        &33u32,
-        &33u32,
-        &17u32,
-        &17u32,
-    );
+    remittance_client.initialize_split(&user, &0u64, &33u32, &33u32, &17u32, &17u32);
 
     // Calculate split for an amount that will have rounding
     let total = 1_000i128;
