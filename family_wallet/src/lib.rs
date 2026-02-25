@@ -443,7 +443,9 @@ impl FamilyWallet {
             panic!("Only Owner or Admin can configure multi-sig");
         }
 
-        if threshold == 0 || threshold > signers.len() {
+        // Validate threshold
+        let signer_count = signers.len();
+        if threshold == 0 || threshold > signer_count {
             panic!("Invalid threshold");
         }
 
@@ -461,7 +463,7 @@ impl FamilyWallet {
 
         let config = MultiSigConfig {
             threshold,
-            signers: signers.clone(),
+            signers,
             spending_limit,
         };
 
