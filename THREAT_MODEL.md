@@ -1,8 +1,8 @@
 # Remitwise Smart Contracts - Threat Model
 
-**Version:** 1.0  
-**Date:** 2026-02-24  
-**Status:** Initial Security Review  
+**Version:** 1.0
+**Date:** 2026-02-24
+**Status:** Initial Security Review
 **Reviewer:** Security Team
 
 ## Executive Summary
@@ -123,7 +123,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ### 3.1 Unauthorized Access Threats
 
 #### T-UA-01: Information Disclosure via Reporting Contract
-**Severity:** HIGH  
+**Severity:** HIGH
 **Description:** The reporting contract allows any caller to query sensitive financial data for any user without authorization checks.
 
 **Affected Functions:**
@@ -142,7 +142,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-UA-02: Cross-Contract Authorization Bypass
-**Severity:** MEDIUM  
+**Severity:** MEDIUM
 **Description:** Orchestrator executes downstream operations without verifying caller owns the resources being manipulated.
 
 **Affected Functions:**
@@ -160,7 +160,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-UA-03: Expired Role Retention
-**Severity:** LOW  
+**Severity:** LOW
 **Description:** Family wallet role expiry not consistently enforced across all functions.
 
 **Affected Functions:**
@@ -178,7 +178,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ### 3.2 Replay Attack Threats
 
 #### T-RP-01: Nonce Bypass in Import Operations
-**Severity:** MEDIUM  
+**Severity:** MEDIUM
 **Description:** Data import operations use nonces but nonce validation may be bypassed if storage is corrupted.
 
 **Affected Functions:**
@@ -195,7 +195,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-RP-02: Multi-sig Transaction Replay
-**Severity:** LOW  
+**Severity:** LOW
 **Description:** Executed multi-sig transactions stored in `EXEC_TXS` map but no expiry mechanism.
 
 **Affected Functions:**
@@ -213,7 +213,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ### 3.3 Griefing & Denial of Service Threats
 
 #### T-DOS-01: Storage Bloat Attack
-**Severity:** MEDIUM  
+**Severity:** MEDIUM
 **Description:** Unbounded maps and audit logs allow attackers to exhaust storage.
 
 **Affected Contracts:**
@@ -231,7 +231,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-DOS-02: Cross-Contract Call Cascade Failure
-**Severity:** MEDIUM  
+**Severity:** MEDIUM
 **Description:** Single downstream contract failure causes entire orchestrator flow to revert.
 
 **Affected Functions:**
@@ -248,7 +248,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-DOS-03: Batch Operation Abuse
-**Severity:** LOW  
+**Severity:** LOW
 **Description:** Batch operations limited to 50 items but no rate limiting across multiple calls.
 
 **Affected Functions:**
@@ -267,7 +267,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ### 3.4 Economic Attack Threats
 
 #### T-EC-01: Rounding Error Exploitation
-**Severity:** MEDIUM  
+**Severity:** MEDIUM
 **Description:** Percentage-based allocation may have rounding errors that accumulate over time.
 
 **Affected Functions:**
@@ -283,7 +283,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-EC-02: Emergency Mode Fund Drain
-**Severity:** HIGH  
+**Severity:** HIGH
 **Description:** Emergency mode allows unlimited transfers without multi-sig and no cooldown enforcement.
 
 **Affected Functions:**
@@ -301,7 +301,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-EC-03: Spending Limit Bypass
-**Severity:** LOW  
+**Severity:** LOW
 **Description:** Spending limit of 0 means unlimited, no way to enforce true zero spending.
 
 **Affected Functions:**
@@ -319,7 +319,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ### 3.5 Data Integrity Threats
 
 #### T-DI-01: Weak Checksum Validation
-**Severity:** MEDIUM  
+**Severity:** MEDIUM
 **Description:** Data migration uses simple checksum vulnerable to collision attacks.
 
 **Affected Functions:**
@@ -336,7 +336,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-DI-02: Archive Data Loss
-**Severity:** LOW  
+**Severity:** LOW
 **Description:** Archived records use compressed structs losing original data fields.
 
 **Affected Functions:**
@@ -355,7 +355,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-DI-03: Mixed Storage Type Inconsistency
-**Severity:** MEDIUM  
+**Severity:** MEDIUM
 **Description:** Savings goals uses both persistent and instance storage with different TTLs.
 
 **Affected Contracts:**
@@ -373,7 +373,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ### 3.6 Reentrancy & Cross-Contract Threats
 
 #### T-RE-01: Cross-Contract Reentrancy
-**Severity:** HIGH  
+**Severity:** HIGH
 **Description:** Orchestrator makes multiple cross-contract calls without reentrancy protection.
 
 **Affected Functions:**
@@ -391,7 +391,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-RE-02: Unvalidated Contract Addresses
-**Severity:** MEDIUM  
+**Severity:** MEDIUM
 **Description:** Reporting contract doesn't validate configured addresses are actual contracts.
 
 **Affected Functions:**
@@ -410,7 +410,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ### 3.7 Privilege Escalation Threats
 
 #### T-PE-01: Pause Admin Single Point of Failure
-**Severity:** MEDIUM  
+**Severity:** MEDIUM
 **Description:** Single pause admin with no backup or recovery mechanism.
 
 **Affected Contracts:**
@@ -427,7 +427,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-PE-02: Upgrade Admin Privilege Abuse
-**Severity:** LOW  
+**Severity:** LOW
 **Description:** Upgrade admin can change version number but no actual upgrade mechanism exists.
 
 **Affected Functions:**
@@ -445,7 +445,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ### 3.8 Input Validation Threats
 
 #### T-IV-01: Unbounded String Inputs
-**Severity:** LOW  
+**Severity:** LOW
 **Description:** Goal names, bill names, policy names have no length limits.
 
 **Affected Functions:**
@@ -462,7 +462,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-IV-02: Tag Content Not Validated
-**Severity:** LOW  
+**Severity:** LOW
 **Description:** Tags validated for length but not content, could contain malicious strings.
 
 **Affected Functions:**
@@ -478,7 +478,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-IV-03: Extreme Value Handling
-**Severity:** LOW  
+**Severity:** LOW
 **Description:** No maximum limits on amounts, could cause calculation issues.
 
 **Affected Functions:**
@@ -496,7 +496,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ### 3.9 Event & Audit Threats
 
 #### T-EV-01: Sensitive Data in Public Events
-**Severity:** MEDIUM  
+**Severity:** MEDIUM
 **Description:** Events include full amounts, dates, and addresses visible to all.
 
 **Affected Contracts:**
@@ -512,7 +512,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-EV-02: Audit Log Unbounded Growth
-**Severity:** LOW  
+**Severity:** LOW
 **Description:** Audit logs grow without limit, no cleanup mechanism.
 
 **Affected Contracts:**
@@ -531,7 +531,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ### 3.10 Pause & Emergency Control Threats
 
 #### T-PC-01: Pause State Desynchronization
-**Severity:** MEDIUM  
+**Severity:** MEDIUM
 **Description:** Each contract has independent pause state, no global coordination.
 
 **Affected Contracts:**
@@ -548,7 +548,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ---
 
 #### T-PC-02: No Pause Reason Tracking
-**Severity:** LOW  
+**Severity:** LOW
 **Description:** Pause events don't include reason or context.
 
 **Affected Contracts:**
@@ -941,7 +941,7 @@ Incoming Remittance → remittance_split → [savings_goals, bill_payments, insu
 ### 7.1 Immediate Actions (Critical Priority)
 
 #### 1. Add Authorization to Reporting Contract
-**Issue:** T-UA-01  
+**Issue:** T-UA-01
 **Action:** Implement caller verification in all reporting query functions
 
 ```rust
@@ -960,13 +960,13 @@ pub fn get_remittance_summary(
 }
 ```
 
-**Timeline:** Immediate (before mainnet deployment)  
+**Timeline:** Immediate (before mainnet deployment)
 **Effort:** Low (1-2 days)
 
 ---
 
 #### 2. Implement Reentrancy Protection
-**Issue:** T-RE-01  
+**Issue:** T-RE-01
 **Action:** Add reentrancy guard to orchestrator
 
 ```rust
@@ -992,13 +992,13 @@ pub fn execute_remittance_flow(...) {
 }
 ```
 
-**Timeline:** Immediate (before mainnet deployment)  
+**Timeline:** Immediate (before mainnet deployment)
 **Effort:** Medium (3-5 days including testing)
 
 ---
 
 #### 3. Add Emergency Transfer Rate Limiting
-**Issue:** T-EC-02  
+**Issue:** T-EC-02
 **Action:** Enforce cooldown and transfer limits in emergency mode
 
 ```rust
@@ -1019,7 +1019,7 @@ pub fn execute_emergency_transfer_now(...) -> u64 {
 }
 ```
 
-**Timeline:** Immediate (before mainnet deployment)  
+**Timeline:** Immediate (before mainnet deployment)
 **Effort:** Low (1-2 days)
 
 ---
@@ -1027,7 +1027,7 @@ pub fn execute_emergency_transfer_now(...) -> u64 {
 ### 7.2 Short-Term Actions (High Priority)
 
 #### 4. Replace Checksum with Cryptographic Hash
-**Issue:** T-DI-01  
+**Issue:** T-DI-01
 **Action:** Use SHA-256 instead of simple checksum
 
 ```rust
@@ -1042,13 +1042,13 @@ impl ExportSnapshot {
 }
 ```
 
-**Timeline:** 1-2 weeks  
+**Timeline:** 1-2 weeks
 **Effort:** Low (already using sha2 crate)
 
 ---
 
 #### 5. Implement Storage Bounds
-**Issue:** T-DOS-01  
+**Issue:** T-DOS-01
 **Action:** Add per-user entity limits
 
 ```rust
@@ -1075,13 +1075,13 @@ pub fn create_goal(...) -> u32 {
 }
 ```
 
-**Timeline:** 2-3 weeks  
+**Timeline:** 2-3 weeks
 **Effort:** Medium (requires testing across all contracts)
 
 ---
 
 #### 6. Standardize Storage Type
-**Issue:** T-DI-03  
+**Issue:** T-DI-03
 **Action:** Convert all storage to persistent type
 
 ```rust
@@ -1092,13 +1092,13 @@ env.storage().instance().get(&symbol_short!("GOALS"))
 env.storage().persistent().get(&symbol_short!("GOALS"))
 ```
 
-**Timeline:** 2-3 weeks  
+**Timeline:** 2-3 weeks
 **Effort:** Medium (requires careful migration and testing)
 
 ---
 
 #### 7. Add Contract Address Validation
-**Issue:** T-RE-02  
+**Issue:** T-RE-02
 **Action:** Validate configured addresses are contracts
 
 ```rust
@@ -1109,17 +1109,17 @@ pub fn configure_addresses(
     // ... other addresses
 ) -> bool {
     caller.require_auth();
-    
+
     // Validate addresses are contracts (attempt to call a standard function)
     // This will panic if address is not a contract
     let split_client = RemittanceSplitClient::new(&env, &remittance_split);
     let _ = split_client.get_split(); // Verify contract responds
-    
+
     // ... existing logic
 }
 ```
 
-**Timeline:** 1-2 weeks  
+**Timeline:** 1-2 weeks
 **Effort:** Low
 
 ---
@@ -1127,7 +1127,7 @@ pub fn configure_addresses(
 ### 7.3 Medium-Term Actions (Medium Priority)
 
 #### 8. Implement Global Pause Mechanism
-**Issue:** T-PC-01  
+**Issue:** T-PC-01
 **Action:** Create pause coordinator contract
 
 ```rust
