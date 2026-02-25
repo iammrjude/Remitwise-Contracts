@@ -1,6 +1,10 @@
 #![no_std]
 
-use remitwise_common::{clamp_limit, EventCategory, EventPriority, RemitwiseEvents, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT, ARCHIVE_LIFETIME_THRESHOLD, ARCHIVE_BUMP_AMOUNT, CONTRACT_VERSION, MAX_BATCH_SIZE};
+use remitwise_common::{
+    clamp_limit, EventCategory, EventPriority, RemitwiseEvents, ARCHIVE_BUMP_AMOUNT,
+    ARCHIVE_LIFETIME_THRESHOLD, CONTRACT_VERSION, DEFAULT_PAGE_LIMIT, INSTANCE_BUMP_AMOUNT,
+    INSTANCE_LIFETIME_THRESHOLD, MAX_BATCH_SIZE, MAX_PAGE_LIMIT,
+};
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Map, String,
