@@ -1,4 +1,5 @@
 #![cfg(test)]
+
 //! Stress tests for arithmetic operations with very large i128 values in savings_goals
 //!
 //! These tests verify that the savings_goals contract handles extreme values correctly:
@@ -12,6 +13,7 @@
 //! - withdraw_from_goal uses checked_sub internally and will panic with "underflow" on underflow
 //! - No explicit caps are imposed by the contract, but overflow/underflow will panic
 //! - batch_add_to_goals has same limitations as add_to_goal for each contribution
+
 use savings_goals::{ContributionItem, SavingsGoalContract, SavingsGoalContractClient};
 use soroban_sdk::testutils::{Address as AddressTrait, Ledger, LedgerInfo};
 use soroban_sdk::{Env, String, Vec};
