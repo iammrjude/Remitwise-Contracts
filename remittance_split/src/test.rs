@@ -3,7 +3,7 @@
 use super::*;
 use soroban_sdk::{
     testutils::{Address as AddressTrait, Events, Ledger, LedgerInfo},
-    Address, Env, IntoVal, Symbol, TryFromVal, Val, Vec,
+    Address, Env, Symbol, TryFromVal,
 };
 
 fn set_time(env: &Env, timestamp: u64) {
