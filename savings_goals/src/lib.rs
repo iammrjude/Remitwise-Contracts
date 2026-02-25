@@ -246,6 +246,11 @@ impl SavingsGoalContract {
     // Pause / upgrade
     // -----------------------------------------------------------------------
 
+    /// Bootstrap storage: set NEXT_ID to 1 and GOALS to an empty map only when
+    /// those keys are missing. Intended to be idempotent: calling init() more
+    /// than once (e.g. from different entrypoints or upgrade paths) must not
+    /// overwrite existing goals or reset NEXT_ID, to avoid ID collisions and
+    /// data loss.
     pub fn init(env: Env) {
         let storage = env.storage().persistent();
         if storage.get::<_, u32>(&Self::STORAGE_NEXT_ID).is_none() {
