@@ -1,29 +1,25 @@
 #![no_std]
 
-mod events;
-use events::{EventCategory, EventPriority, RemitwiseEvents};
+use remitwise_common::{
+    clamp_limit, EventCategory, EventPriority, RemitwiseEvents, ARCHIVE_BUMP_AMOUNT,
+    ARCHIVE_LIFETIME_THRESHOLD, CONTRACT_VERSION, DEFAULT_PAGE_LIMIT, INSTANCE_BUMP_AMOUNT,
+    INSTANCE_LIFETIME_THRESHOLD, MAX_BATCH_SIZE, MAX_PAGE_LIMIT,
+};
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Map, String,
     Symbol, Vec,
 };
 
-// Storage TTL constants
-const INSTANCE_LIFETIME_THRESHOLD: u32 = 17280;
-const INSTANCE_BUMP_AMOUNT: u32 = 518400;
-const ARCHIVE_LIFETIME_THRESHOLD: u32 = 17280;
-const ARCHIVE_BUMP_AMOUNT: u32 = 2592000;
-
-/// Pagination limits
-pub const DEFAULT_PAGE_LIMIT: u32 = 20;
-pub const MAX_PAGE_LIMIT: u32 = 50;
-
+#[derive(Clone, Debug)]
+#[contracttype]
 #[derive(Clone, Debug)]
 #[contracttype]
 pub struct Bill {
     pub id: u32,
     pub owner: Address,
     pub name: String,
+    pub external_ref: Option<String>,
     pub amount: i128,
     pub due_date: u64,
     pub recurring: bool,
@@ -36,6 +32,7 @@ pub struct Bill {
     /// Defaults to "XLM" for entries created before this field was introduced.
     pub currency: String,
 }
+
 
 /// Paginated result for bill queries
 #[contracttype]
@@ -77,8 +74,12 @@ pub enum Error {
     BatchTooLarge = 9,
     BatchValidationFailed = 10,
     InvalidLimit = 11,
+    InvalidTag = 12,
+    EmptyTags = 13,
 }
 
+#[contracttype]
+#[derive(Clone)]
 #[contracttype]
 #[derive(Clone)]
 pub struct ArchivedBill {
@@ -92,6 +93,7 @@ pub struct ArchivedBill {
     pub currency: String,
 }
 
+
 /// Paginated result for archived bill queries
 #[contracttype]
 #[derive(Clone)]
@@ -104,6 +106,10 @@ pub struct ArchivedBillPage {
 
 #[contracttype]
 #[derive(Clone)]
+pub enum BillEvent {
+    Created,
+    Paid,
+    ExternalRefUpdated,
 pub struct StorageStats {
     pub active_bills: u32,
     pub archived_bills: u32,
@@ -117,6 +123,23 @@ pub struct BillPayments;
 
 #[contractimpl]
 impl BillPayments {
+    /// Create a new bill
+    ///
+    /// # Arguments
+    /// * `owner` - Address of the bill owner (must authorize)
+    /// * `name` - Name of the bill (e.g., "Electricity", "School Fees")
+    /// * `amount` - Amount to pay (must be positive)
+    /// * `due_date` - Due date as Unix timestamp
+    /// * `recurring` - Whether this is a recurring bill
+    /// * `frequency_days` - Frequency in days for recurring bills (must be > 0 if recurring)
+    /// * `external_ref` - Optional external system reference ID
+    ///
+    /// # Returns
+    /// The ID of the created bill
+    ///
+    /// # Errors
+    /// * `InvalidAmount` - If amount is zero or negative
+    /// * `InvalidFrequency` - If recurring is true but frequency_days is 0
     // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------
@@ -150,15 +173,6 @@ impl BillPayments {
 
     /// Clamp a caller-supplied limit to [1, MAX_PAGE_LIMIT].
     /// A value of 0 is treated as DEFAULT_PAGE_LIMIT.
-    fn clamp_limit(limit: u32) -> u32 {
-        if limit == 0 {
-            DEFAULT_PAGE_LIMIT
-        } else if limit > MAX_PAGE_LIMIT {
-            MAX_PAGE_LIMIT
-        } else {
-            limit
-        }
-    }
 
     // -----------------------------------------------------------------------
     // Pause / upgrade
@@ -351,6 +365,7 @@ impl BillPayments {
     // Core bill operations
     // -----------------------------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_bill(
         env: Env,
         owner: Address,
@@ -359,6 +374,7 @@ impl BillPayments {
         due_date: u64,
         recurring: bool,
         frequency_days: u32,
+        external_ref: Option<String>,
         currency: String,
     ) -> Result<u32, Error> {
         owner.require_auth();
@@ -372,7 +388,7 @@ impl BillPayments {
         }
 
         // Resolve default currency: blank input → "XLM"
-        let resolved_currency = if currency.len() == 0 {
+        let resolved_currency = if currency.is_empty() {
             String::from_str(&env, "XLM")
         } else {
             currency
@@ -397,6 +413,7 @@ impl BillPayments {
             id: next_id,
             owner: owner.clone(),
             name: name.clone(),
+            external_ref,
             amount,
             due_date,
             recurring,
@@ -409,6 +426,7 @@ impl BillPayments {
         };
 
         let bill_owner = bill.owner.clone();
+        let bill_external_ref = bill.external_ref.clone();
         bills.set(next_id, bill);
         env.storage()
             .instance()
@@ -418,6 +436,10 @@ impl BillPayments {
             .set(&symbol_short!("NEXT_ID"), &next_id);
         Self::adjust_unpaid_total(&env, &bill_owner, amount);
 
+        // Emit event for audit trail
+        env.events().publish(
+            (symbol_short!("bill"), BillEvent::Created),
+            (next_id, bill_owner, bill_external_ref),
         RemitwiseEvents::emit(
             &env,
             EventCategory::State,
@@ -466,6 +488,7 @@ impl BillPayments {
                 id: next_id,
                 owner: bill.owner.clone(),
                 name: bill.name.clone(),
+                external_ref: bill.external_ref.clone(),
                 amount: bill.amount,
                 due_date: next_due_date,
                 recurring: true,
@@ -482,6 +505,7 @@ impl BillPayments {
                 .set(&symbol_short!("NEXT_ID"), &next_id);
         }
 
+        let bill_external_ref = bill.external_ref.clone();
         let paid_amount = bill.amount;
         let was_recurring = bill.recurring;
         bills.set(bill_id, bill);
@@ -492,6 +516,10 @@ impl BillPayments {
             Self::adjust_unpaid_total(&env, &caller, -paid_amount);
         }
 
+        // Emit event for audit trail
+        env.events().publish(
+            (symbol_short!("bill"), BillEvent::Paid),
+            (bill_id, caller, bill_external_ref),
         RemitwiseEvents::emit(
             &env,
             EventCategory::Transaction,
@@ -527,7 +555,7 @@ impl BillPayments {
     /// `BillPage { items, next_cursor, count }`.
     /// When `next_cursor == 0` there are no more pages.
     pub fn get_unpaid_bills(env: Env, owner: Address, cursor: u32, limit: u32) -> BillPage {
-        let limit = Self::clamp_limit(limit);
+        let limit = clamp_limit(limit);
         let bills: Map<u32, Bill> = env
             .storage()
             .instance()
@@ -556,7 +584,7 @@ impl BillPayments {
     /// Same cursor/limit semantics as `get_unpaid_bills`.
     pub fn get_all_bills_for_owner(env: Env, owner: Address, cursor: u32, limit: u32) -> BillPage {
         owner.require_auth();
-        let limit = Self::clamp_limit(limit);
+        let limit = clamp_limit(limit);
         let bills: Map<u32, Bill> = env
             .storage()
             .instance()
@@ -584,7 +612,7 @@ impl BillPayments {
     ///
     /// Same cursor/limit semantics.
     pub fn get_overdue_bills(env: Env, cursor: u32, limit: u32) -> BillPage {
-        let limit = Self::clamp_limit(limit);
+        let limit = clamp_limit(limit);
         let current_time = env.ledger().timestamp();
         let bills: Map<u32, Bill> = env
             .storage()
@@ -622,7 +650,7 @@ impl BillPayments {
             return Err(Error::Unauthorized);
         }
 
-        let limit = Self::clamp_limit(limit);
+        let limit = clamp_limit(limit);
         let bills: Map<u32, Bill> = env
             .storage()
             .instance()
@@ -676,6 +704,58 @@ impl BillPayments {
         }
     }
 
+    /// Set or clear an external reference ID for a bill
+    ///
+    /// # Arguments
+    /// * `caller` - Address of the caller (must be the bill owner)
+    /// * `bill_id` - ID of the bill to update
+    /// * `external_ref` - Optional external system reference ID
+    ///
+    /// # Returns
+    /// Ok(()) if update was successful
+    ///
+    /// # Errors
+    /// * `BillNotFound` - If bill with given ID doesn't exist
+    /// * `Unauthorized` - If caller is not the bill owner
+    pub fn set_external_ref(
+        env: Env,
+        caller: Address,
+        bill_id: u32,
+        external_ref: Option<String>,
+    ) -> Result<(), Error> {
+        caller.require_auth();
+
+        Self::extend_instance_ttl(&env);
+        let mut bills: Map<u32, Bill> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("BILLS"))
+            .unwrap_or_else(|| Map::new(&env));
+
+        let mut bill = bills.get(bill_id).ok_or(Error::BillNotFound)?;
+        if bill.owner != caller {
+            return Err(Error::Unauthorized);
+        }
+
+        bill.external_ref = external_ref.clone();
+        bills.set(bill_id, bill);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("BILLS"), &bills);
+
+        env.events().publish(
+            (symbol_short!("bill"), BillEvent::ExternalRefUpdated),
+            (bill_id, caller, external_ref),
+        );
+
+        Ok(())
+    }
+
+    /// Get all bills (paid and unpaid)
+    ///
+    /// # Returns
+    /// Vec of all Bill structs
+    pub fn get_all_bills(env: Env) -> Vec<Bill> {
     // -----------------------------------------------------------------------
     // Backward-compat helpers
     // -----------------------------------------------------------------------
@@ -709,7 +789,7 @@ impl BillPayments {
         cursor: u32,
         limit: u32,
     ) -> ArchivedBillPage {
-        let limit = Self::clamp_limit(limit);
+        let limit = clamp_limit(limit);
         let archived: Map<u32, ArchivedBill> = env
             .storage()
             .instance()
@@ -1311,7 +1391,7 @@ mod test {
                 &(env.ledger().timestamp() + 86400 * (i as u64 + 1)),
                 &false,
                 &0,
-                &String::from_str(&env, "XLM"),
+                &String::from_str(env, "XLM"),
             );
             ids.push_back(id);
         }
@@ -1543,6 +1623,7 @@ mod test {
                 &(env.ledger().timestamp() + 86400 * (i as u64 + 1)),
                 &false,
                 &0,
+                &String::from_str(&env, "XLM"),
             );
             client.create_bill(
                 &owner_b,
@@ -1551,6 +1632,7 @@ mod test {
                 &(env.ledger().timestamp() + 86400 * (i as u64 + 1)),
                 &false,
                 &0,
+                &String::from_str(&env, "XLM"),
             );
         }
 
@@ -2281,18 +2363,16 @@ mod test {
             &original_due_date,
             &true,      // recurring
             &frequency, // frequency_days
+            &String::from_str(&env, "XLM"),
         );
 
-        // Pay the recurring bill – this should create the next occurrence.
         client.pay_bill(&owner, &bill_id);
 
-        // The next bill should have ID = bill_id + 1.
         let next_id = bill_id + 1;
         let next_bill = client
             .get_bill(&next_id)
             .expect("Next recurring bill should exist after paying the original");
 
-        // --- Assert every cloned field ---
         assert_eq!(
             next_bill.name, bill_name,
             "Cloned bill must preserve the original name"
@@ -2301,10 +2381,7 @@ mod test {
             next_bill.amount, amount,
             "Cloned bill must preserve the original amount"
         );
-        assert_eq!(
-            next_bill.recurring, true,
-            "Cloned bill must remain recurring"
-        );
+        assert!(next_bill.recurring, "Cloned bill must remain recurring");
         assert_eq!(
             next_bill.frequency_days, frequency,
             "Cloned bill must preserve frequency_days"
@@ -2313,7 +2390,7 @@ mod test {
             next_bill.owner, owner,
             "Cloned bill must preserve the original owner"
         );
-        assert_eq!(next_bill.paid, false, "Cloned bill must start as unpaid");
+        assert!(!next_bill.paid, "Cloned bill must start as unpaid");
         assert_eq!(
             next_bill.paid_at, None,
             "Cloned bill must have paid_at = None"
@@ -2323,6 +2400,159 @@ mod test {
         assert_eq!(
             next_bill.due_date, expected_due_date,
             "Cloned bill due_date must be original_due_date + frequency_days * 86400"
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Time & Ledger Drift Resilience Tests (#158)
+    //
+    // Assumptions:
+    //  - A bill is overdue when due_date < current_time (strict less-than).
+    //  - At exactly due_date the bill is NOT yet overdue.
+    //  - Stellar ledger timestamps are monotonically increasing in production.
+    // ══════════════════════════════════════════════════════════════════════
+
+    /// Bill is NOT overdue when ledger timestamp == due_date (inclusive boundary).
+    #[test]
+    fn test_time_drift_bill_not_overdue_at_exact_due_date() {
+        let due_date = 1_000_000u64;
+        let env = make_env();
+        env.mock_all_auths();
+        env.ledger().set_timestamp(due_date);
+
+        let cid = env.register_contract(None, BillPayments);
+        let client = BillPaymentsClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+
+        client.create_bill(
+            &owner,
+            &String::from_str(&env, "Power"),
+            &200,
+            &due_date,
+            &false,
+            &0,
+            &String::from_str(&env, "XLM"),
+        );
+
+        let page = client.get_overdue_bills(&0, &100);
+        assert_eq!(
+            page.count, 0,
+            "Bill must not appear overdue when current_time == due_date"
+        );
+    }
+
+    /// Bill becomes overdue exactly one second after due_date.
+    #[test]
+    fn test_time_drift_bill_overdue_one_second_after_due_date() {
+        let due_date = 1_000_000u64;
+        let env = make_env();
+        env.mock_all_auths();
+        env.ledger().set_timestamp(due_date);
+
+        let cid = env.register_contract(None, BillPayments);
+        let client = BillPaymentsClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+
+        client.create_bill(
+            &owner,
+            &String::from_str(&env, "Internet"),
+            &150,
+            &due_date,
+            &false,
+            &0,
+            &String::from_str(&env, "XLM"),
+        );
+
+        let page = client.get_overdue_bills(&0, &100);
+        assert_eq!(page.count, 0);
+
+        env.ledger().set_timestamp(due_date + 1);
+        let page = client.get_overdue_bills(&0, &100);
+        assert_eq!(
+            page.count, 1,
+            "Bill must appear overdue exactly one second past due_date"
+        );
+    }
+
+    /// Mix of past-due, exactly-due, and future bills: only past-due one appears.
+    #[test]
+    fn test_time_drift_overdue_boundary_mixed_bills() {
+        let current_time = 2_000_000u64;
+        let env = make_env();
+        env.mock_all_auths();
+        env.ledger().set_timestamp(current_time);
+
+        let cid = env.register_contract(None, BillPayments);
+        let client = BillPaymentsClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+
+        client.create_bill(
+            &owner,
+            &String::from_str(&env, "Overdue"),
+            &100,
+            &(current_time - 1),
+            &false,
+            &0,
+            &String::from_str(&env, "XLM"),
+        );
+        client.create_bill(
+            &owner,
+            &String::from_str(&env, "DueNow"),
+            &200,
+            &current_time,
+            &false,
+            &0,
+            &String::from_str(&env, "XLM"),
+        );
+        client.create_bill(
+            &owner,
+            &String::from_str(&env, "Future"),
+            &300,
+            &(current_time + 1),
+            &false,
+            &0,
+            &String::from_str(&env, "XLM"),
+        );
+
+        let page = client.get_overdue_bills(&0, &100);
+        assert_eq!(
+            page.count, 1,
+            "Only the bill with due_date < current_time must appear overdue"
+        );
+        assert_eq!(page.items.get(0).unwrap().amount, 100);
+    }
+
+    /// Full-day boundary (86400 s): bill created at due_date, queried one day later, is overdue.
+    #[test]
+    fn test_time_drift_overdue_full_day_boundary() {
+        let day = 86400u64;
+        let due_date = 1_000_000u64;
+        let env = make_env();
+        env.mock_all_auths();
+        env.ledger().set_timestamp(due_date);
+
+        let cid = env.register_contract(None, BillPayments);
+        let client = BillPaymentsClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+
+        client.create_bill(
+            &owner,
+            &String::from_str(&env, "Monthly Rent"),
+            &5000,
+            &due_date,
+            &false,
+            &0,
+            &String::from_str(&env, "XLM"),
+        );
+
+        let page = client.get_overdue_bills(&0, &100);
+        assert_eq!(page.count, 0);
+
+        env.ledger().set_timestamp(due_date + day);
+        let page = client.get_overdue_bills(&0, &100);
+        assert_eq!(
+            page.count, 1,
+            "Bill must be overdue one full day past due_date"
         );
     }
 }
